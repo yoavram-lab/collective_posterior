@@ -69,7 +69,7 @@ class CollectivePosterior:
         # Get log_prob value(s)
         log_probs = torch.empty((theta_size,r))
         for i in range(r):
-            if self.amortized_posterior: # amortized posterior
+            if len(self.posterior_list) == 0: # amortized posterior
                 log_probs[:,i] = torch.max(eps,self.amortized_posterior.set_default_x(self.Xs[i,:]).log_prob(theta))
             else: # posterior log-prob function only takes theta
                 log_probs[:,i] = torch.max(eps,self.posterior_list[i](theta).reshape(theta_size,))
@@ -222,7 +222,7 @@ class CollectivePosterior:
         return torch.stack(samples)
 
     
-    def get_map(self, keep=True):
+    def get_map(self, n_init=100, keep=True):
         """
         Compute the Maximum A Posteriori (MAP) estimate.
 
@@ -232,19 +232,23 @@ class CollectivePosterior:
         Returns:
             torch.Tensor: MAP estimate of the posterior mode.
         """
+        samples = self.samples
+        
         if len(self.posterior_list) > 0:
             func = lambda theta: np.array(-1*self.log_prob(theta)).reshape(1,-1) 
         else:
             func = lambda theta: np.array(-1*self.log_prob(theta)) # max(log_prob) = min(-log_prob) + np array for optimizer
         if len(self.samples) > 0:
-            x0 = self.samples[0,:]
+            x0 = self.samples[self.log_prob(samples).argmax()]
         else:
-            x0 = self.sample_one() # get a nice random guess
+            samples = self.sample(n_init)
+            x0 = self.samples[self.log_prob(samples).argmax()] # get a nice random guess
         x0 = list(x0)
         collective_map = torch.from_numpy(minimize(func, x0, method='Nelder-Mead').x) # Optimization
         if keep:
             self.map = collective_map
         return collective_map
+
         
     
     
@@ -267,7 +271,7 @@ class CollectivePosterior:
             prior_samples = self.prior.sample((self.n_eval,))
             prior_logps = self.prior.log_prob(prior_samples).reshape(len(prior_samples,))
             for i in range(r):
-                if self.amortized_posterior: # amortized posterior
+                if len(self.posterior_list) == 0: # amortized posterior
                     log_probs[:,i] = torch.max(eps,self.amortized_posterior.set_default_x(self.Xs[i,:]).log_prob(prior_samples))
                 else: # posterior log-prob function only takes theta
                     log_probs[:,i] = torch.max(eps,self.posterior_list[i](prior_samples))
