@@ -49,7 +49,6 @@ thetas = torch.tensor(pd.read_csv(thetas_dir, index_col=0).values.astype('float'
 
 def coverage_old(posterior, samples, conf_levels, theta):
     covs = torch.empty(len(conf_levels), len(theta))
-    sorted_probs, ind = torch.sort(posterior.log_prob(samples), descending=True)
     for j in range(len(conf_levels)):
         conf_level = conf_levels[j]   
         taken_samples = samples[:int(conf_level*len(samples))+1]
@@ -82,12 +81,12 @@ def evaluate_cp(posterior, thetas, n_samples):
     all_samples = torch.empty(len(thetas), len(thetas[0])*n_samples)
     for i in range(len(thetas)):
         if h:
-            X = wrapper_hierarchical(simulator, 10, thetas[i])
+            X = wrapper_hierarchical(simulator, n_set, thetas[i])
         else:
             X = wrapper(simulator, n_set, thetas[i])
         cp = CollectivePosterior(prior=get_prior(sim), amortized_posterior=posterior, log_C=1, Xs=X, epsilon=epsilon)
         cp.get_log_C()
-        samples = cp.sample(n_samples, jump=int(1e5))
+        samples = cp.sample(n_samples)
         print(i)
         if ss:
             all_samples[i,:] = samples.T.flatten()
@@ -113,7 +112,7 @@ def evaluate_iid(posterior, thetas, n_samples):
         if h:
             X = wrapper_hierarchical(simulator, n_set, thetas[i])
         else:
-            X = wrapper(simulator, 10, thetas[i])
+            X = wrapper(simulator, n_set, thetas[i])
         samples = posterior.set_default_x(X).sample((n_samples,))
         if ss:
             all_samples[i,:] = samples.T.flatten()
