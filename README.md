@@ -23,6 +23,10 @@ For WF:
 - The notebook npse.ipynb compares NPE and NPSE on empirical data.
 - The notebook empirical_wf.ipynb shows the Collective Posterior vs. NPE+PIE vs. NPSE on empirical data.
 
+Additionally:
+- The notebook collective_sparrows.ipynb shows the collective inference for Lachlan et al., 2018's data.
+- The notebook phylo_abc.ipynb demonstrates inference with ABC and the collective posterior on a phylogenetic dataset.
+
 Inference files:
 - inference.py - NPE
 - inference_ensemble.py - ensemble NPE
