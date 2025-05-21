@@ -21,8 +21,10 @@ For WF:
 - The notebooks wf_collective_abc.ipynb and empirical_wf.ipynb demonstrate inference from empirical data with Rej-ABC and NPE, respectively. 
 - The notebook erratic.ipynb demonstrates the "randomly low posterior densities" for unlikely parameters.
 - The notebook npse.ipynb compares NPE and NPSE on empirical data.
+- The notebook empirical_wf.ipynb shows the Collective Posterior vs. NPE+PIE vs. NPSE on empirical data.
 
 Inference files:
 - inference.py - NPE
 - inference_ensemble.py - ensemble NPE
 - inference_sbi_iid.py - NPE+PIE
+- inference_utils.py - priors
