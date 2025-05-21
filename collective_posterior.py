@@ -82,7 +82,7 @@ class CollectivePosterior:
         return method_dict[method](n_samples, jump, keep)
         
     
-    def rejection_sample(self, n_samples, jump=int(1e4), keep=True):
+    def rejection_sample(self, n_samples, jump=int(1e4), m = 5, keep=True):
         """
         Sample from the collective posterior using rejection sampling.
 
@@ -103,7 +103,7 @@ class CollectivePosterior:
                 prior_probs = self.prior.log_prob(samps)
                 probs = torch.log(torch.rand(samps.size()[0]))
                 lp = self.log_prob(samps)
-                next_idx = lp - prior_probs > probs
+                next_idx = (lp - prior_probs) > (probs+m)
                 samples_to_add = samps[next_idx]
                 samples = torch.cat([samples, samples_to_add])
                 cur += next_idx.sum()
