@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import math
 import sbi.utils as utils
 import torch
 from scipy.special import logsumexp
@@ -78,7 +79,7 @@ class CollectivePosterior:
         return log_probs.sum(axis=1) + self.log_C - (1-r)*logpr # log rules
     
     def sample(self, n_samples, jump=int(1e4), keep=True, method='rejection'):
-        method_dict = {'rejection': self.rejection_sample,'unimodal': self.sample_unimodal}
+        method_dict = {'rejection': self.rejection_sample,'mixed': self.sample_multimodal}
         return method_dict[method](n_samples, jump, keep)
         
     
@@ -156,38 +157,79 @@ class CollectivePosterior:
         new_theta = cands[probs.argmax()]
         return res, new_theta
     
-    def sample_unimodal(self, n_samples, jump=int(1e5), keep=True):
-        """
-        Sample from the posterior using iterative proposals.
+#     def sample_unimodal(self, n_samples, jump=int(1e5), keep=True):
+#         """
+#         Sample from the posterior using iterative proposals.
 
-        Parameters:
-            n_samples (int): Number of samples to generate.
-            jump (int): Number of candidates to sample at each iteration. Default is 1e4.
-            keep (bool): Whether to store the samples in the object. Default is True.
+#         Parameters:
+#             n_samples (int): Number of samples to generate.
+#             jump (int): Number of candidates to sample at each iteration. Default is 1e4.
+#             keep (bool): Whether to store the samples in the object. Default is True.
         
-        Returns:
-            torch.Tensor: Samples from the posterior.
+#         Returns:
+#             torch.Tensor: Samples from the posterior.
+#         """
+#         theta = self.sample_one(jump, keep=False)
+#         samples = torch.empty((n_samples, len(theta)))
+#         cur = 0
+
+#         with tqdm(total=n_samples, desc="Sampling") as pbar:
+#             while cur < n_samples:
+#                 samps, theta = self.sample_around(theta, jump)
+#                 how_many = len(samps)
+#                 if cur + how_many > n_samples:
+#                     how_many = n_samples - cur
+#                 if how_many > 0:
+#                     samples[cur:cur + how_many, :] = samps[:how_many, :]
+#                     cur += how_many
+#                     pbar.update(how_many)  # Update the progress bar
+
+#         if keep:
+#             self.samples = samples
+
+#         return samples
+
+    def sample_multimodal(
+        self,
+        n_samples: int,
+        k: int = 10,                     # number of starting centres
+        jump: int = 10_000,
+        keep: bool = True,
+    ):
         """
-        theta = self.sample_one(jump, keep=False)
-        samples = torch.empty((n_samples, len(theta)))
-        cur = 0
+        Draw `n_samples` points by running `k` independent short explorations.
+        Each sub-run starts from a different seed drawn with `sample_one`.
 
-        with tqdm(total=n_samples, desc="Sampling") as pbar:
-            while cur < n_samples:
-                samps, theta = self.sample_around(theta, jump)
-                how_many = len(samps)
-                if cur + how_many > n_samples:
-                    how_many = n_samples - cur
-                if how_many > 0:
-                    samples[cur:cur + how_many, :] = samps[:how_many, :]
-                    cur += how_many
-                    pbar.update(how_many)  # Update the progress bar
+        NOTE: correctness hinges on `sample_one` / `sample_around`
+        being proper rejection samplers (see §2 below).
+        """
+        assert k >= 1, "k must be at least 1"
+        per_chain = math.ceil(n_samples / k)          # sub-samples per centre
+        all_chunks = []
+        init_thetas = self.rejection_sample(k, jump, keep)
+        with tqdm(total=n_samples, desc="Sampling") as bar:
+            for j in range(k):
+                # 1) independent seed
+                theta = init_thetas[j]
 
+                # 2) grow a local cloud around that seed
+                chunk = torch.empty((per_chain, self.theta_dim))
+                cur = 0
+                while cur < per_chain:
+                    samps, theta = self.sample_around(theta, jump)
+                    take = min(per_chain - cur, samps.size(0))
+                    if take:
+                        chunk[cur : cur + take] = samps[:take]
+                        cur += take
+                        bar.update(take)
+
+                all_chunks.append(chunk)
+
+        samples = torch.cat(all_chunks, dim=0)[:n_samples]   # exact count
         if keep:
             self.samples = samples
-
         return samples
-    
+
     
     def sample_mcmc(self, num_samples, step_size):
         """
