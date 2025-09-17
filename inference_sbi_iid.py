@@ -1,19 +1,33 @@
 # inference with NPE
 from simulators import WF_wrapper, GLU_wrapper, SLCP_wrapper, GORDO_wrapper
 from inference_utils import get_prior
+
+
 from sbi.utils import BoxUniform
 import torch
+from joblib import Parallel, delayed
 import pickle
 from time import time
 import argparse
 import sbibm
 from sbi.inference import NPE, simulate_for_sbi
 
+# Suppress warnings containing 'NaN'
+import warnings
+warnings.filterwarnings("ignore", message=".*NaN.*")
+warnings.filterwarnings("ignore", message=".*torch.*")
+
+
+# Ensure PyTorch uses 100 CPU cores
+torch.set_num_threads(100)
+
 from sbi.utils.user_input_checks import (
     check_sbi_inputs,
     process_prior,
     process_simulator,
 )
+
+
 
 # time
 start = time()
@@ -51,16 +65,23 @@ theta = prior.sample((num_training_samples,))
 x_dim_dict = {'GLU': 10, 'WF': 12, 'SLCP': 8, 'GORDO': 39} 
 x_dim = x_dim_dict[sim]
 
-x = torch.ones(num_training_samples * max_num_trials, max_num_trials, x_dim) * float(
-    "nan"
-)
-for i in range(num_training_samples):
+
+# Parallelized simulation using joblib
+def simulate_and_fill(i):
     xi = simulator(reps=max_num_trials, parameters=theta[i])
+    rows = []
     for j in range(max_num_trials):
-        x[i * max_num_trials + j, : j + 1, :] = xi[: j + 1, :]
+        row = torch.full((max_num_trials, x_dim), float('nan'))
+        row[:j+1, :] = xi[:j+1, :]
+        rows.append(row)
+    return rows
+
+results = Parallel(n_jobs=100)(delayed(simulate_and_fill)(i) for i in range(num_training_samples))
+x = torch.stack([row for sublist in results for row in sublist])
 
 theta = theta.repeat_interleave(max_num_trials, dim=0)
-
+torch.save(theta, f'{sim}/theta_train_iid.pt')
+print(f'Saved theta to {sim}/theta_train_iid.pt')
 # inference
 from sbi.neural_nets import posterior_nn
 from sbi.neural_nets.embedding_nets import FCEmbedding, PermutationInvariantEmbedding
