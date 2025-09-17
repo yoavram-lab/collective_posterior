@@ -1,12 +1,13 @@
 import numpy as np
 import torch
 import sbibm
-
+from GORDO.simulator import simulator as GORDO
 
 # constants
 N = int(1e7)
 generation = np.array([8, 21, 29, 37, 50, 58, 66, 79, 87, 95, 108, 116]) # from Chuong et al 2024
         
+
 
 def WF(parameters, seed=None):
     """ CNV evolution simulator
@@ -137,3 +138,10 @@ def SLCP_wrapper(reps, parameters):
         out=SLCP(parameters)[0]
         slcp_reps[i,:] = out
     return slcp_reps
+
+def GORDO_wrapper(reps, parameters):
+    gordo_reps = torch.empty(reps, 39)
+    for i in range(reps):
+        out=GORDO(parameters.numpy())
+        gordo_reps[i,:] = torch.tensor(out)
+    return gordo_reps

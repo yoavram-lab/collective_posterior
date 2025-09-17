@@ -3,19 +3,16 @@ from sbi.utils import BoxUniform
 import sbibm
 
 # Define the prior
+# Define the prior
 def get_prior(sim):
     if sim == 'WF':
         prior = BoxUniform(low=torch.tensor([-2, -7, -8]), high=torch.tensor([0, -2, -2]))
     elif sim == 'GLU':
-        theta_dim = 10
-        prior_min = torch.tensor([-1]*theta_dim, dtype=torch.float32)
-        prior_max = torch.tensor([1]*theta_dim, dtype=torch.float32)
-        prior = BoxUniform(low=prior_min, high=prior_max)
+        prior = sbibm.get_task('gaussian_linear_uniform').get_prior_dist()
     elif sim == 'SLCP':
-        theta_dim = 5
-        prior_min = torch.tensor([-3]*theta_dim, dtype=torch.float32)
-        prior_max = torch.tensor([3]*theta_dim, dtype=torch.float32)
-        prior = BoxUniform(low=prior_min, high=prior_max)
+        prior = sbibm.get_task('slcp').get_prior_dist()
+    elif sim == 'GORDO':
+        prior = BoxUniform(low=torch.tensor([-9.0, 0.5, -4.0]), high=torch.tensor([-4.0, 15.0, -1.0]))
     else:
         raise ValueError('Unknown simulator')
 

@@ -1,5 +1,6 @@
 # inference with NPE
-from simulators import WF, GLU, SLCP
+from simulators import WF, GLU, SLCP, GORDO
+from inference_utils import get_prior
 import torch
 import pickle
 import time
@@ -24,20 +25,7 @@ args = parser.parse_args()
 # time
 start = time.time()
 
-# Define the prior
-def get_prior(sim):
-    if sim == 'WF':
-        prior = BoxUniform(low=torch.tensor([-2, -7, -8]), high=torch.tensor([0, -2, -2]))
-    elif sim == 'GLU':
-        prior = sbibm.get_task('gaussian_linear_uniform').get_prior_dist()
-    elif sim == 'SLCP':
-        prior = sbibm.get_task('slcp').get_prior_dist()
-    else:
-        raise ValueError('Unknown simulator')
-
-    return prior
-
-model_dict = {'GLU': GLU, 'WF': WF, 'SLCP': SLCP}
+model_dict = {'GLU': GLU, 'WF': WF, 'SLCP': SLCP, 'GORDO': GORDO}
 
 # Define the prior and simulator
 sim = str(args.model)

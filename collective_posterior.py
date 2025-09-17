@@ -191,10 +191,10 @@ class CollectivePosterior:
 
     def sample_multimodal(
         self,
-        n_samples: int,
-        k: int = 10,                     # number of starting centres
+        n_samples: int,                     # number of starting centres
         jump: int = 10_000,
         keep: bool = True,
+        k: int = 10
     ):
         """
         Draw `n_samples` points by running `k` independent short explorations.
