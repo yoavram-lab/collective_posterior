@@ -140,7 +140,7 @@ def SLCP_wrapper(reps, parameters):
     return slcp_reps
 
 def GORDO_wrapper(reps, parameters):
-    gordo_reps = torch.empty(reps, 39)
+    gordo_reps = torch.empty(reps, 11)
     for i in range(reps):
         out=GORDO(parameters.numpy())
         gordo_reps[i,:] = torch.tensor(out)

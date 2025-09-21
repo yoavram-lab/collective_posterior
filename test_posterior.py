@@ -1,5 +1,5 @@
 # inference with NPE
-from simulators import WF, GLU, SLCP, wrapper, wrapper_hierarchical
+from simulators import WF, GLU, SLCP, wrapper, wrapper_hierarchical, GORDO
 import torch
 import pickle
 # import time
@@ -14,6 +14,8 @@ import pandas as pd
 from collective_posterior import CollectivePosterior
 from inference_utils import get_prior
 
+torch.set_num_threads(80)
+
 #### arguments ####
 parser = argparse.ArgumentParser()
 parser.add_argument('-m', "--model") # model name
@@ -27,7 +29,7 @@ parser.add_argument('-ss', "--save_samples", action='store_true') # whether to s
 args = parser.parse_args()
 
 
-model_dict = {'GLU': GLU, 'WF': WF, 'SLCP': SLCP}
+model_dict = {'GLU': GLU, 'WF': WF, 'SLCP': SLCP, 'GORDO': GORDO}
 
 # Define the prior and simulator
 sim = str(args.model)

@@ -18,8 +18,8 @@ warnings.filterwarnings("ignore", message=".*NaN.*")
 warnings.filterwarnings("ignore", message=".*torch.*")
 
 
-# Ensure PyTorch uses 100 CPU cores
-torch.set_num_threads(100)
+# Ensure PyTorch uses 50 CPU cores
+torch.set_num_threads(50)
 
 from sbi.utils.user_input_checks import (
     check_sbi_inputs,
@@ -62,7 +62,7 @@ theta = prior.sample((num_training_samples,))
 
 # there are certainly smarter ways to construct the training data set, but we go with a
 # for loop here for illustration purposes.
-x_dim_dict = {'GLU': 10, 'WF': 12, 'SLCP': 8, 'GORDO': 39} 
+x_dim_dict = {'GLU': 10, 'WF': 12, 'SLCP': 8, 'GORDO': 11} 
 x_dim = x_dim_dict[sim]
 
 
