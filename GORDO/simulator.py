@@ -244,3 +244,17 @@ def simulator(theta,
     if return_raw:
         return summary, batch
     return summary
+
+def simulator_UB(theta,
+              N0=100000,
+              gens_per_bottle=5,
+              total_gens=300,
+              reps=1,
+              n_bins_freq: int = 5,
+              n_bins_fit: int = 6,
+              use_wbar_times = None,
+              return_raw: bool = False):
+    """Simultor with a fixed a=10"""
+
+    theta_to_sim = np.array([theta[0],10,theta[1]])
+    return simulator(theta_to_sim, N0, gens_per_bottle, total_gens, reps, n_bins_freq, n_bins_fit, use_wbar_times, return_raw)

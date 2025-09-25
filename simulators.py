@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 import sbibm
-from GORDO.simulator import simulator as GORDO
+from GORDO.simulator import simulator_UB as GORDO
 
 # constants
 N = int(1e7)

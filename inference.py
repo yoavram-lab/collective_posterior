@@ -37,7 +37,7 @@ num_sim = int(args.num_sim)
 # inference
 # Check prior, return PyTorch prior.
 prior, num_parameters, prior_returns_numpy = process_prior(prior)
-
+print(f'Number of parameters: {num_parameters}')
 # Check simulator, returns PyTorch simulator able to simulate batches.
 simulator = process_simulator(simulator, prior, prior_returns_numpy)
 

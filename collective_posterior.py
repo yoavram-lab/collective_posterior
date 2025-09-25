@@ -69,12 +69,12 @@ class CollectivePosterior:
         return sum_logq - (r - 1) * logp - self.log_C
 
 
-    def sample(self, n_samples, jump=int(1e4), keep=True, method='rejection'):
+    def sample(self, n_samples, jump=int(1e5), keep=True, method='rejection'):
         method_dict = {'rejection': self.rejection_sample,'mixed': self.sample_multimodal}
         return method_dict[method](n_samples, jump, keep)
         
     
-    def rejection_sample(self, n_samples, jump=int(1e4), m = 5, keep=True):
+    def rejection_sample(self, n_samples, jump=int(1e4), m = 0, keep=True):
         """
         Sample from the collective posterior using rejection sampling.
 
@@ -108,7 +108,7 @@ class CollectivePosterior:
     
 
 
-    def sample_one(self, jump=int(1e4), keep=False):
+    def sample_one(self, jump=int(1e5), keep=False):
         """
         Draw a single sample from the posterior.
 
@@ -183,7 +183,7 @@ class CollectivePosterior:
     def sample_multimodal(
         self,
         n_samples: int,                     # number of starting centres
-        jump: int = 10_000,
+        jump: int = 100_000,
         keep: bool = True,
         k: int = 10
     ):
