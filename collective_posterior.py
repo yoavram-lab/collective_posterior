@@ -40,44 +40,35 @@ class CollectivePosterior:
     
     def log_prob(self, theta):
         """
-        Compute the log probability of the collective posterior for a given parameter set.
-        
-        Parameters:
-            theta (torch.Tensor): Parameter set to evaluate.
-        
-        Returns:
-            torch.Tensor: Log probability of the given parameter set.
+        Compute log q_coll(theta) = sum_i log q_i(theta|x_i) - (r-1) log p(theta) - log C
+        Assumes self.log_C was set via get_log_C() or provided at init.
         """
-        theta = torch.tensor(theta, dtype=torch.float32)
-        # allow one-dim tensor for theta
-        if len(theta.size()) == 1:
-            theta_size = 1
-        else:
-            theta_size = theta.size()[0]
-        
-        # get number of reps
+        if self.log_C is None:
+            raise RuntimeError("log_C is not set. Call get_log_C() first or pass it at init.")
+
+        # to tensor, allow (d,) or (N,d)
+        theta = torch.as_tensor(theta, dtype=torch.float32)
+        if theta.ndim == 1:
+            theta = theta.unsqueeze(0)  # (1, d)
+
+        N = theta.shape[0]
         r = len(self.Xs)
-        posterior = self.amortized_posterior
-            
-        # epsilon must be a tensor
-        eps = torch.tensor(self.epsilon)
-        if type(theta) != type(torch.tensor(4.2)):
-            theta = torch.tensor(theta, dtype=torch.float32)
-        if len(theta.size()) > 1:
-            t = theta.size()[0]
-            eps = torch.tensor([eps for i in range(t)])
 
-        # Get log_prob value(s)
-        log_probs = torch.empty((theta_size,r))
+        # collect per-replicate log q_i
+        log_probs = torch.empty((N, r), dtype=torch.float32)
         for i in range(r):
-            if len(self.posterior_list) == 0: # amortized posterior
-                log_probs[:,i] = torch.max(eps,self.amortized_posterior.set_default_x(self.Xs[i,:]).log_prob(theta))
-            else: # posterior log-prob function only takes theta
-                log_probs[:,i] = torch.max(eps,self.posterior_list[i](theta).reshape(theta_size,))
+            if len(self.posterior_list) == 0:  # amortized posterior
+                lp_i = self.amortized_posterior.set_default_x(self.Xs[i, :]).log_prob(theta)
+            else:  # provided per-replicate log-posteriors
+                lp_i = self.posterior_list[i](theta)  # expects (N,) or (N,1)
+            log_probs[:, i] = torch.clamp(lp_i.reshape(N,), min=self.epsilon)  # epsilon is a LOG floor
 
-        logpr = self.prior.log_prob(theta).reshape(theta_size,)
-        return log_probs.sum(axis=1) + self.log_C - (1-r)*logpr # log rules
-    
+        sum_logq = log_probs.sum(dim=1)                           # (N,)
+        logp = self.prior.log_prob(theta).reshape(N,)             # (N,)
+
+        return sum_logq - (r - 1) * logp - self.log_C
+
+
     def sample(self, n_samples, jump=int(1e4), keep=True, method='rejection'):
         method_dict = {'rejection': self.rejection_sample,'mixed': self.sample_multimodal}
         return method_dict[method](n_samples, jump, keep)
@@ -291,34 +282,44 @@ class CollectivePosterior:
             self.map = collective_map
         return collective_map
 
+
+
         
     
     
+    @torch.no_grad()
     def get_log_C(self, n_reps=10):
         """
-        Estimate the normalizing constant log_C using Monte Carlo integration.
-
-        Parameters:
-            n_reps (int): Number of repetitions for averaging. Default is 10.
-        
-        Returns:
-            torch.Tensor: Estimated log_C value.
+        Estimate log C = log ∫ u(θ) dθ via importance sampling with θ ~ p(θ),
+        where u(θ) = Π_i q_i(θ|x_i) / p(θ)^{r-1}.
+        Monte Carlo identity:
+            C = E_{θ~p} [ exp( Σ_i log q_i(θ|x_i) - r * log p(θ) ) ].
+        We average in probability space across repetitions, then take log.
         """
-        eps = torch.tensor(self.epsilon, dtype=torch.float32)
         r = len(self.Xs)
-        log_probs = torch.empty((self.n_eval, r))
-        res = []
-        logdt = torch.log(torch.tensor(self.n_eval, dtype=torch.float32))
-        for k in range(n_reps):
-            prior_samples = self.prior.sample((self.n_eval,))
-            prior_logps = self.prior.log_prob(prior_samples).reshape(len(prior_samples,))
+        N = int(self.n_eval)
+
+        rep_logs = []
+        for _ in range(n_reps):
+            theta = self.prior.sample((N,))                       # (N,d)
+            prior_logps = self.prior.log_prob(theta).reshape(N,)  # (N,)
+
+            # build (N, r) matrix of log q_i
+            log_probs = torch.empty((N, r), dtype=torch.float32)
             for i in range(r):
-                if len(self.posterior_list) == 0: # amortized posterior
-                    log_probs[:,i] = torch.max(eps,self.amortized_posterior.set_default_x(self.Xs[i,:]).log_prob(prior_samples))
-                else: # posterior log-prob function only takes theta
-                    log_probs[:,i] = torch.max(eps,self.posterior_list[i](prior_samples))
-                    # log_probs[:,i] = torch.max(self.amortized_posterior.set_default_x(self.Xs[i,:]).log_prob(prior_samples), eps)
-            res.append(-1*torch.logsumexp(torch.sum(log_probs,-1) -(1-r)*prior_logps -1*logdt ,0))
-        self.log_C = torch.tensor(res).mean()
+                if len(self.posterior_list) == 0:
+                    lp_i = self.amortized_posterior.set_default_x(self.Xs[i, :]).log_prob(theta)
+                else:
+                    lp_i = self.posterior_list[i](theta)
+                log_probs[:, i] = torch.clamp(lp_i.reshape(N,), min=self.epsilon)  # LOG floor
+
+            sum_logq = log_probs.sum(dim=1)                       # (N,)
+            # importance weights in log-space: log u(θ) - log p(θ) = Σ log q_i - r log p
+            weights_log = sum_logq - r * prior_logps              # (N,)
+            # log-mean-exp over N samples
+            logC_rep = torch.logsumexp(weights_log, dim=0) - math.log(N)
+            rep_logs.append(logC_rep)
+
+        # average across repetitions in probability space, then log
+        self.log_C = torch.logsumexp(torch.stack(rep_logs), dim=0) - math.log(len(rep_logs))
         return self.log_C
-        

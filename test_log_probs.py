@@ -27,7 +27,7 @@ parser.add_argument('-ss', "--save_samples", action='store_true') # whether to s
 args = parser.parse_args()
 
 
-model_dict = {'GLU': GLU, 'WF': WF, 'SLCP': SLCP}
+model_dict = {'GLU': GLU, 'WF': WF, 'SLCP': SLCP, 'GORDO': GORDO}
 
 # Define the prior and simulator
 sim = str(args.model)

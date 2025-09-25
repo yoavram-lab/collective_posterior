@@ -45,9 +45,12 @@ ss = args.save_samples
 # Load the posterior with pickle
 posterior = pickle.load(open(posterior_dir, 'rb'))
 
-# Load the test thetas
-thetas = torch.tensor(pd.read_csv(thetas_dir, index_col=0).values.astype('float'), dtype=torch.float32)
 
+conf_levels = [0.1,0.2,0.3,0.4,0.5,0.8,0.9,0.95]
+
+# Load the test thetas
+thetas = torch.tensor(np.array(pd.read_csv(thetas_dir, index_col=0).values.astype('float')), dtype=torch.float32)
+# thetas = torch.load(thetas_dir)
 
 def coverage_old(posterior, samples, conf_levels, theta):
     covs = torch.empty(len(conf_levels), len(theta))
@@ -70,16 +73,18 @@ def info_gain(posterior, samples, conf_levels):
     return res
 
 def evaluate_cp(posterior, thetas, n_samples):
-    conf_levels = [0.5,0.8,0.9,0.95]
     n_set = 10
     if sim == 'WF':
         epsilon = -150
+    if sim == 'GORDO':
+        epsilon = -100
     else:
         epsilon = -10000
     accus = torch.empty(thetas.shape)
     covs = torch.empty(len(thetas),1)
     covs_old = torch.empty(len(thetas[:,0]),len(conf_levels), len(thetas[0]))
     ig = torch.empty(len(thetas),len(conf_levels))
+    log_probs = torch.empty(len(thetas),1)
     all_samples = torch.empty(len(thetas), len(thetas[0])*n_samples)
     for i in range(len(thetas)):
         if h:
@@ -88,7 +93,7 @@ def evaluate_cp(posterior, thetas, n_samples):
             X = wrapper(simulator, n_set, thetas[i])
         cp = CollectivePosterior(prior=get_prior(sim), amortized_posterior=posterior, log_C=1, Xs=X, epsilon=epsilon)
         cp.get_log_C()
-        samples = cp.sample(n_samples)
+        samples = cp.sample_multimodal(n_samples)
         print(i)
         if ss:
             all_samples[i,:] = samples.T.flatten()
@@ -98,17 +103,18 @@ def evaluate_cp(posterior, thetas, n_samples):
         covs[i] = (cp.log_prob(samples) > cp.log_prob(params)).sum()/n_samples
         covs_old[i] = coverage_old(posterior, samples, conf_levels, theta=thetas[i])
         ig[i] = info_gain(posterior, samples, conf_levels)
+        log_probs[i] = cp.log_prob(thetas[i]).item()
         if i%10 == 9:
             print(f'{round(100*(i+1)/len(thetas),2)}%')
-    return accus, covs, covs_old, ig, all_samples
+    return accus, covs, covs_old, ig, log_probs, all_samples
 
 def evaluate_iid(posterior, thetas, n_samples):
-    conf_levels = [0.5,0.8,0.9,0.95]
     n_set = 10
     accus = torch.empty(thetas.shape)
     covs = torch.empty(len(thetas),1)
     covs_old = torch.empty(len(thetas[:,0]),len(conf_levels), len(thetas[0]))
     ig = torch.empty(len(thetas),len(conf_levels))
+    log_probs = torch.empty(len(thetas),1)
     all_samples = torch.empty(len(thetas), len(thetas[0])*n_samples)
     for i in range(len(thetas)):
         if h:
@@ -124,9 +130,10 @@ def evaluate_iid(posterior, thetas, n_samples):
         covs[i] = (posterior.log_prob(samples) > posterior.log_prob(params)).sum()/len(thetas)
         covs_old[i] = coverage_old(posterior, samples, conf_levels, theta=thetas[i])
         ig[i] = info_gain(posterior, samples, conf_levels)
+        log_probs[i] = posterior.log_prob(thetas[i]).item()
         if i%10 == 1:
             print(f'{round(100*i/len(thetas),2)}%')
-    return accus, covs, covs_old, ig, all_samples
+    return accus, covs, covs_old, ig, log_probs, all_samples
 
 eval_func = evaluate_cp if c else evaluate_iid
 add_iid = '' if c else '_iid'
@@ -134,16 +141,19 @@ add_h = '_h' if h else ''
 add_e = '_e' if e else ''
 
 
-accus, covs, covs_old, ig, all_samples = eval_func(posterior, thetas, n_samples=samples)
+accus, covs, covs_old, ig, log_probs, all_samples = eval_func(posterior, thetas, n_samples=samples)
 covs_old = covs_old.mean(0)
 accus = accus.detach().numpy()
 covs = covs.detach().numpy()
 covs_old = covs_old.detach().numpy()
 ig = ig.detach().numpy()
+log_probs = log_probs.detach().numpy()
 all_samples = all_samples.detach().numpy()
 
-pd.DataFrame(accus).to_csv(f'{sim}/tests/accus_{sim}{add_iid}{add_h}{add_e}_r.csv')
-pd.DataFrame(covs).to_csv(f'{sim}/tests/covs_{sim}{add_iid}{add_h}{add_e}_r.csv')
-pd.DataFrame(covs_old, index=[0.5,0.8,0.9,0.95]).to_csv(f'{sim}/tests/covs_old_{sim}{add_iid}{add_h}{add_e}_r.csv')
-pd.DataFrame(ig, columns=[0.5,0.8,0.9,0.95]).to_csv(f'{sim}/tests/ig_{sim}{add_iid}{add_h}{add_e}_r.csv')
-pd.DataFrame(all_samples).to_csv(f'{sim}/tests/samples_{sim}{add_iid}{add_h}{add_e}_r.csv')
+pd.DataFrame(accus).to_csv(f'{sim}/tests/accus_{sim}{add_iid}{add_h}{add_e}_r_.csv')
+pd.DataFrame(covs).to_csv(f'{sim}/tests/covs_{sim}{add_iid}{add_h}{add_e}_r_.csv')
+pd.DataFrame(covs_old, index=conf_levels).to_csv(f'{sim}/tests/covs_old_{sim}{add_iid}{add_h}{add_e}_r_.csv')
+pd.DataFrame(ig, columns=conf_levels).to_csv(f'{sim}/tests/ig_{sim}{add_iid}{add_h}{add_e}_r_.csv')
+pd.DataFrame(log_probs).to_csv(f'{sim}/tests/logprobs_{sim}{add_iid}{add_h}{add_e}_r_.csv')
+if ss:
+    pd.DataFrame(all_samples).to_csv(f'{sim}/tests/samples_{sim}{add_iid}{add_h}{add_e}_r_.csv')
