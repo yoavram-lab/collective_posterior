@@ -1,5 +1,5 @@
 # inference with NPE
-from simulators import WF, GLU, SLCP, wrapper, wrapper_hierarchical, GORDO
+from simulators import WF, GLU, SLCP, wrapper, wrapper_hierarchical, CLASSIC_WF
 import torch
 import pickle
 # import time
@@ -29,7 +29,7 @@ parser.add_argument('-ss', "--save_samples", action='store_true') # whether to s
 args = parser.parse_args()
 
 
-model_dict = {'GLU': GLU, 'WF': WF, 'SLCP': SLCP, 'GORDO': GORDO}
+model_dict = {'GLU': GLU, 'WF': WF, 'SLCP': SLCP, 'CLASSIC_WF': CLASSIC_WF}
 
 # Define the prior and simulator
 sim = str(args.model)
@@ -44,7 +44,7 @@ ss = args.save_samples
 
 # Load the posterior with pickle
 posterior = pickle.load(open(posterior_dir, 'rb'))
-
+prior=get_prior(sim)
 
 conf_levels = [0.1,0.2,0.3,0.4,0.5,0.8,0.9,0.95]
 
@@ -73,11 +73,11 @@ def info_gain(posterior, samples, conf_levels):
     return res
 
 def evaluate_cp(posterior, thetas, n_samples):
-    n_set = 10
-    if sim == 'WF':
+    n_set = 12
+    if sim == 'WF' or sim=='CLASSIC_WF':
         epsilon = -150
     if sim == 'GORDO':
-        epsilon = -100
+        epsilon = -10
     else:
         epsilon = -10000
     accus = torch.empty(thetas.shape)
@@ -88,13 +88,15 @@ def evaluate_cp(posterior, thetas, n_samples):
     all_samples = torch.empty(len(thetas), len(thetas[0])*n_samples)
     for i in range(len(thetas)):
         if h:
-            X = wrapper_hierarchical(simulator, n_set, thetas[i])
+            X = wrapper(simulator, n_set-2, thetas[i])
+            x_outlier = simulator(prior.base_dist.low).reshape(1,-1)
+            x_oo = simulator(prior.base_dist.high).reshape(1,-1)
+            X = torch.cat([X,x_outlier, x_oo])
         else:
             X = wrapper(simulator, n_set, thetas[i])
-        cp = CollectivePosterior(prior=get_prior(sim), amortized_posterior=posterior, log_C=1, Xs=X, epsilon=epsilon)
+        cp = CollectivePosterior(prior, amortized_posterior=posterior, log_C=1, Xs=X, epsilon=epsilon)
         cp.get_log_C()
         samples = cp.sample(n_samples)
-        print(i)
         if ss:
             all_samples[i,:] = samples.T.flatten()
             
@@ -109,7 +111,7 @@ def evaluate_cp(posterior, thetas, n_samples):
     return accus, covs, covs_old, ig, log_probs, all_samples
 
 def evaluate_iid(posterior, thetas, n_samples):
-    n_set = 10
+    n_set = 12
     accus = torch.empty(thetas.shape)
     covs = torch.empty(len(thetas),1)
     covs_old = torch.empty(len(thetas[:,0]),len(conf_levels), len(thetas[0]))
@@ -118,7 +120,10 @@ def evaluate_iid(posterior, thetas, n_samples):
     all_samples = torch.empty(len(thetas), len(thetas[0])*n_samples)
     for i in range(len(thetas)):
         if h:
-            X = wrapper_hierarchical(simulator, n_set, thetas[i])
+            X = wrapper(simulator, n_set-2, thetas[i])
+            x_outlier = simulator(prior.base_dist.low).reshape(1,-1)
+            x_oo = simulator(prior.base_dist.high).reshape(1,-1)
+            X = torch.cat([X,x_outlier, x_oo])
         else:
             X = wrapper(simulator, n_set, thetas[i])
         samples = posterior.set_default_x(X).sample((n_samples,))

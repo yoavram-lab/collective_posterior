@@ -12,7 +12,9 @@ def get_prior(sim):
     elif sim == 'SLCP':
         prior = sbibm.get_task('slcp').get_prior_dist()
     elif sim == 'GORDO':
-        prior = BoxUniform(low=torch.tensor([-9.0, -4.0]), high=torch.tensor([-4.0, -1.0]))
+        prior = BoxUniform(low=torch.tensor([-8.0, 0.5, -4.5]), high=torch.tensor([-5.0, 10.0, -1.5]))
+    elif sim == 'CLASSIC_WF':
+        prior = BoxUniform(low=torch.tensor([-3.0, -9, 5]), high=torch.tensor([-0.5, -4, 8]))
     else:
         raise ValueError('Unknown simulator')
 
