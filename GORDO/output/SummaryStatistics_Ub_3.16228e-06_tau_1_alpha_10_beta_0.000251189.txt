@@ -1,0 +1,2 @@
+Population	 Frequency at Bottleneck 10	 Frequency at Bottleneck 20	 Frequency at Bottleneck 30	 Frequency at Bottleneck 40	 Frequency at Bottleneck 50	 Frequency at Bottleneck 60	 Whole Population Fitness Average at Bottleneck 10	 Whole Population Fitness Average at Bottleneck 20	 Whole Population Fitness Average at Bottleneck 30	 Whole Population Fitness Average at Bottleneck 40	 Whole Population Fitness Average at Bottleneck 50	 Whole Population Fitness Average at Bottleneck 60
+POP-1 	 0.503283 	 0.511358 	 0.510258 	 0.517608 	 0.529333 	 0.52015 	 1 	 1 	 1 	 1 	 1 	 1 

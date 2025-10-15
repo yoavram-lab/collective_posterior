@@ -617,9 +617,9 @@ int main(int ac, char **av)
         delete [] popul.n_mutations_class_CFP;
     }
     
-    //DistrStatistics = fopen(arq_SS2,"a");
-    //fprintf(DistrStatistics,"->[Unif Seed:NA] %g %g %g\n", popul.Ub, popul.alpha, popul.beta);
-    //fclose(DistrStatistics);
+    DistrStatistics = fopen(arq_SS2,"a");
+    fprintf(DistrStatistics,"->[Unif Seed:NA] %g %g %g\n", popul.Ub, popul.alpha, popul.beta);
+    fclose(DistrStatistics);
     
     sprintf(arq_SS,"output/SummaryStatistics_Ub_%g_tau_%g_alpha_%g_beta_%g.txt", popul.Ub, popul.tau, popul.alpha, popul.beta);
     cout<<"Output file "<<arq_SS<<"\n";

@@ -54,7 +54,6 @@ simulator = model_dict[sim]
 
 max_num_trials = 10
   
-
 # construct training data set: we want to cover the full range of possible number of
 # trials
 num_training_samples = num_sim

@@ -1,5 +1,5 @@
 # inference with NPE
-from simulators import WF, GLU, SLCP, GORDO
+from simulators import WF, GLU, SLCP, CLASSIC_WF
 from inference_utils import get_prior
 import torch
 import pickle
@@ -14,18 +14,19 @@ from sbi.utils.user_input_checks import (
     process_simulator,
 )
 
+torch.set_num_threads(80)
 
 #### arguments ####
 parser = argparse.ArgumentParser()
 parser.add_argument('-m', "--model")
-parser.add_argument('-e', "--epochs")
+parser.add_argument('-e', "--epochs", default=20)
 parser.add_argument('-n', "--num_sim")
 args = parser.parse_args()
 
 # time
 start = time.time()
 
-model_dict = {'GLU': GLU, 'WF': WF, 'SLCP': SLCP, 'GORDO': GORDO}
+model_dict = {'GLU': GLU, 'WF': WF, 'SLCP': SLCP, 'CLASSIC_WF': CLASSIC_WF}
 
 # Define the prior and simulator
 sim = str(args.model)
@@ -37,18 +38,18 @@ num_sim = int(args.num_sim)
 # inference
 # Check prior, return PyTorch prior.
 prior, num_parameters, prior_returns_numpy = process_prior(prior)
-print(f'Number of parameters: {num_parameters}')
+theta = prior.sample((num_sim,))
 # Check simulator, returns PyTorch simulator able to simulate batches.
 simulator = process_simulator(simulator, prior, prior_returns_numpy)
 
 # inference
 inference = NPE(prior)
-theta, x = simulate_for_sbi(simulator, proposal=prior, num_simulations=num_sim)
+theta, x = simulate_for_sbi(simulator, proposal=prior, num_simulations=num_sim, num_workers=80)
 density_estimator = inference.append_simulations(theta, x).train(stop_after_epochs=stop_after_epochs)
 posterior = inference.build_posterior(density_estimator)
 
 # Save the posterior with pickle
-with open(f'{sim}/posteriors/posterior_{sim}_{num_sim}_{stop_after_epochs}.pkl', 'wb') as f:
+with open(f'{sim}/posterior_{sim}_{num_sim}_{stop_after_epochs}.pkl', 'wb') as f:
     pickle.dump(posterior, f)
 
 # time

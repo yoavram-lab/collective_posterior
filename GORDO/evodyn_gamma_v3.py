@@ -116,10 +116,10 @@ def collate(pattern, output, bottleneck):
     print("Loading files: {}".format(pattern))
     df = load(pattern, bottleneck=bottleneck)
     print("Writing collated data to {}".format(output))
-    if output.endswith('gz'):
-        df.to_csv(output, compression='gzip', index=False)
-    else:
-        df.to_csv(output, index=False)
+    # if output.endswith('gz'):
+    #     df.to_csv(output, compression='gzip', index=False)
+    # else:
+    #     df.to_csv(output, index=False)
 
 
 def load(pattern=os.path.join('output', '*.txt'), progressbar=True):

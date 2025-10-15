@@ -30,7 +30,7 @@ class CollectivePosterior:
         self.log_C = log_C 
         self.epsilon = epsilon 
         self.map = None 
-        self.samples = [] 
+        self.samples = torch.empty((0, prior.sample().shape[0])) 
         self.theta_dim = prior.sample().shape[0]
         self.n_eval = n_eval
         self.sample_var = sample_var 
@@ -70,11 +70,48 @@ class CollectivePosterior:
 
 
     def sample(self, n_samples, jump=int(1e5), keep=True, method='rejection'):
+        if len(self.samples) >= n_samples:
+            print(f"Sampled {len(self.samples)} points, returning top {n_samples}.")
+            return self.samples[:n_samples]
         method_dict = {'rejection': self.rejection_sample,'mixed': self.sample_multimodal}
         return method_dict[method](n_samples, jump, keep)
-        
-    
-    def rejection_sample(self, n_samples, jump=int(1e4), m = 0, keep=True):
+
+
+    def mcmc_from_top_sn(self, n_total=1000, step_size=0.05, take_sn=100):
+        """
+        Run independent Metropolis-Hastings chains from each top SN sample in self.samples.
+        n_total: total number of samples to generate (will be split across chains).
+        Adds a progress bar for each chain and a global progress bar.
+        Returns: tensor of shape (n_total, theta_dim)
+        """
+        top_sn_samples = self.samples[:take_sn]
+        log_prob_fn = lambda theta: self.log_prob(theta)
+        all_samples = []
+        theta_dim = top_sn_samples.shape[1]
+        n_per_chain = math.ceil(n_total / top_sn_samples.shape[0])
+        total_steps = n_per_chain * top_sn_samples.shape[0]
+        with tqdm(total=total_steps, desc="MCMC from top SN") as global_pbar:
+            for idx, start in enumerate(top_sn_samples):
+                chain = [start.clone()]
+                cur_logp = log_prob_fn(start.unsqueeze(0))[0]
+                chain_pbar = tqdm(total=n_per_chain, desc=f"Chain {idx+1}/{take_sn}", leave=False)
+                for _ in range(n_per_chain - 1):
+                    proposal = chain[-1] + torch.randn(theta_dim) * step_size
+                    prop_logp = log_prob_fn(proposal.unsqueeze(0))[0]
+                    accept = torch.rand(1).item() < torch.exp(prop_logp - cur_logp)
+                    if accept:
+                        chain.append(proposal)
+                        cur_logp = prop_logp
+                    else:
+                        chain.append(chain[-1].clone())
+                    chain_pbar.update(1)
+                    global_pbar.update(1)
+                chain_pbar.close()
+                all_samples.append(torch.stack(chain))
+        samples = torch.cat(all_samples, dim=0)[:n_total]
+        return samples
+
+    def rejection_sample(self, n_samples, jump=int(1e4), m = -10, keep=True):
         """
         Sample from the collective posterior using rejection sampling.
 
@@ -180,48 +217,59 @@ class CollectivePosterior:
 
 #         return samples
 
+# ...existing code...
+
     def sample_multimodal(
         self,
         n_samples: int,                     # number of starting centres
         jump: int = 100_000,
         keep: bool = True,
-        k: int = 10
+        k: int = 10,
+        T: float = 10.0                     # exploration threshold parameter
     ):
         """
         Draw `n_samples` points by running `k` independent short explorations.
+        Threshold of exploration is log_prob of current centre - T.
+
+        If self.samples is not empty, use those as centres.
         Each sub-run starts from a different seed drawn with `sample_one`.
 
         NOTE: correctness hinges on `sample_one` / `sample_around`
         being proper rejection samplers (see §2 below).
         """
         assert k >= 1, "k must be at least 1"
-        per_chain = math.ceil(n_samples / k)          # sub-samples per centre
+        per_chain = math.ceil(n_samples / k)      # sub-samples per centre
         all_chunks = []
-        init_thetas = self.rejection_sample(k, jump, keep)
+        if len(self.samples) > 0:
+            init_thetas = self.samples[torch.randint(0, len(self.samples), (k,))]
+        else:
+            init_thetas = self.rejection_sample(k, jump, keep)
         with tqdm(total=n_samples, desc="Sampling") as bar:
             for j in range(k):
                 # 1) independent seed
                 theta = init_thetas[j]
-
-                # 2) grow a local cloud around that seed
                 chunk = torch.empty((per_chain, self.theta_dim))
                 cur = 0
+                # Set threshold for exploration
+                threshold = self.log_prob(theta) - T
                 while cur < per_chain:
-                    samps, theta = self.sample_around(theta, jump)
-                    take = min(per_chain - cur, samps.size(0))
+                    samps, new_theta = self.sample_around(theta, jump)
+                    # Only keep samples above the threshold
+                    mask = self.log_prob(samps) > threshold
+                    filtered_samps = samps[mask]
+                    take = min(per_chain - cur, filtered_samps.size(0))
                     if take:
-                        chunk[cur : cur + take] = samps[:take]
+                        chunk[cur : cur + take] = filtered_samps[:take]
                         cur += take
                         bar.update(take)
-
+                    theta = new_theta
                 all_chunks.append(chunk)
-
         samples = torch.cat(all_chunks, dim=0)[:n_samples]   # exact count
         if keep:
             self.samples = samples
         return samples
 
-    
+# ...existing code...    
     def sample_mcmc(self, num_samples, step_size):
         """
         Sample from the posterior using the Metropolis-Hastings MCMC algorithm.
@@ -288,7 +336,7 @@ class CollectivePosterior:
     
     
     @torch.no_grad()
-    def get_log_C(self, n_reps=10):
+    def get_log_C(self, n_reps=10, S=0.005):
         """
         Estimate log C = log ∫ u(θ) dθ via importance sampling with θ ~ p(θ),
         where u(θ) = Π_i q_i(θ|x_i) / p(θ)^{r-1}.
@@ -319,7 +367,15 @@ class CollectivePosterior:
             # log-mean-exp over N samples
             logC_rep = torch.logsumexp(weights_log, dim=0) - math.log(N)
             rep_logs.append(logC_rep)
+            # add top S samples in self.samples
+            topk = weights_log.topk(int(S*N)).indices
+
+            self.samples = torch.cat([self.samples, theta[topk]], dim=0)
 
         # average across repetitions in probability space, then log
         self.log_C = torch.logsumexp(torch.stack(rep_logs), dim=0) - math.log(len(rep_logs))
+        # sort samples by log prob
+        if len(self.samples) > 0:
+            sorted_indices = self.log_prob(self.samples).argsort(descending=True)
+            self.samples = self.samples[sorted_indices]
         return self.log_C

@@ -11,8 +11,8 @@ def get_prior(sim):
         prior = sbibm.get_task('gaussian_linear_uniform').get_prior_dist()
     elif sim == 'SLCP':
         prior = sbibm.get_task('slcp').get_prior_dist()
-    elif sim == 'GORDO':
-        prior = BoxUniform(low=torch.tensor([-8.0, 0.5, -4.5]), high=torch.tensor([-5.0, 10.0, -1.5]))
+    elif sim == 'FWDPY':
+        prior = BoxUniform(low=torch.tensor([-2, -6, 1]), high=torch.tensor([-0.5, -3, 4]))
     elif sim == 'CLASSIC_WF':
         prior = BoxUniform(low=torch.tensor([-3.0, -9, 5]), high=torch.tensor([-0.5, -4, 8]))
     else:
