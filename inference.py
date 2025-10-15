@@ -1,5 +1,5 @@
 # inference with NPE
-from simulators import WF, GLU, SLCP, CLASSIC_WF
+from simulators import WF, GLU, SLCP, CLASSIC_WF, FWDPY
 from inference_utils import get_prior
 import torch
 import pickle
@@ -26,7 +26,7 @@ args = parser.parse_args()
 # time
 start = time.time()
 
-model_dict = {'GLU': GLU, 'WF': WF, 'SLCP': SLCP, 'CLASSIC_WF': CLASSIC_WF}
+model_dict = {'GLU': GLU, 'WF': WF, 'SLCP': SLCP, 'CLASSIC_WF': CLASSIC_WF, 'FWDPY': FWDPY}
 
 # Define the prior and simulator
 sim = str(args.model)

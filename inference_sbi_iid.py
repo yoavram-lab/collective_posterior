@@ -1,7 +1,7 @@
 # inference with NPE
-from simulators import WF_wrapper, GLU_wrapper, SLCP_wrapper, CLASSIC_WF_wrapper
+from simulators import WF_wrapper, GLU_wrapper, SLCP_wrapper, CLASSIC_WF_wrapper, FWDPY_wrapper
 from inference_utils import get_prior
-
+import fwdpy11
 
 from sbi.utils import BoxUniform
 import torch
@@ -19,7 +19,7 @@ warnings.filterwarnings("ignore", message=".*torch.*")
 
 
 # Ensure PyTorch uses 50 CPU cores
-torch.set_num_threads(50)
+torch.set_num_threads(80)
 
 from sbi.utils.user_input_checks import (
     check_sbi_inputs,
@@ -36,7 +36,7 @@ start = time()
 #### arguments ####
 parser = argparse.ArgumentParser()
 parser.add_argument('-m', "--model")
-parser.add_argument('-e', "--epochs")
+parser.add_argument('-e', "--epochs", default=20)
 parser.add_argument('-n', "--num_sim")
 args = parser.parse_args()
 
@@ -48,11 +48,11 @@ num_sim = int(args.num_sim)
 
 sim = str(args.model)
 prior = get_prior(sim)
-model_dict = {'GLU': GLU_wrapper, 'WF': WF_wrapper, 'SLCP': SLCP_wrapper, 'CLASSIC_WF': CLASSIC_WF_wrapper}
+model_dict = {'GLU': GLU_wrapper, 'WF': WF_wrapper, 'SLCP': SLCP_wrapper, 'CLASSIC_WF': CLASSIC_WF_wrapper, 'FWDPY': FWDPY_wrapper}
 simulator = model_dict[sim]
 
 
-max_num_trials = 10
+max_num_trials = 12
   
 # construct training data set: we want to cover the full range of possible number of
 # trials
@@ -61,7 +61,7 @@ theta = prior.sample((num_training_samples,))
 
 # there are certainly smarter ways to construct the training data set, but we go with a
 # for loop here for illustration purposes.
-x_dim_dict = {'GLU': 10, 'WF': 12, 'SLCP': 8, 'CLASSIC_WF': 21} 
+x_dim_dict = {'GLU': 10, 'WF': 12, 'SLCP': 8, 'CLASSIC_WF': 21, 'FWDPY': 20} 
 x_dim = x_dim_dict[sim]
 
 
