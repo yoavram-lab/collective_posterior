@@ -1,5 +1,5 @@
 # inference with NPE
-from simulators import WF, GLU, SLCP, wrapper, wrapper_hierarchical, CLASSIC_WF
+from simulators import WF, GLU, SLCP, wrapper, wrapper_hierarchical, CLASSIC_WF, FWDPY
 import torch
 import pickle
 # import time
@@ -34,7 +34,7 @@ parser.add_argument('-ss', "--save_samples", action='store_true') # whether to s
 args = parser.parse_args()
 
 
-model_dict = {'GLU': GLU, 'WF': WF, 'SLCP': SLCP, 'CLASSIC_WF': CLASSIC_WF}
+model_dict = {'GLU': GLU, 'WF': WF, 'SLCP': SLCP, 'CLASSIC_WF': CLASSIC_WF, 'FWDPY': FWDPY}
 
 # Define the prior and simulator
 sim = str(args.model)
@@ -56,7 +56,7 @@ conf_levels = [0.1,0.2,0.3,0.4,0.5,0.8,0.9,0.95]
 
 # Load the test thetas
 # thetas = torch.tensor(np.array(pd.read_csv(thetas_dir, index_col=0).values.astype('float')), dtype=torch.float32)
-thetas = torch.load(thetas_dir)
+thetas = torch.load(thetas_dir)[:50]
 
 def coverage_old(posterior, samples, conf_levels, theta):
     covs = torch.empty(len(conf_levels), len(theta))
@@ -81,7 +81,7 @@ def evaluate_cp(posterior, thetas, n_samples):
     n_set = 12
     if sim == 'WF':
         epsilon = -150
-    if sim == 'CLASSIC_WF':
+    if sim == 'CLASSIC_WF' or sim == 'FWDPY':
         epsilon = -10
     else:
         epsilon = -10000
@@ -101,7 +101,7 @@ def evaluate_cp(posterior, thetas, n_samples):
             X = wrapper(simulator, n_set, thetas[i])
         cp = CollectivePosterior(prior, amortized_posterior=posterior, log_C=1, Xs=X, epsilon=epsilon)
         cp.get_log_C()
-        samples = cp.mcmc_from_top_sn(n_samples)
+        samples = cp.sample_multimodal(n_samples)
         if ss:
             all_samples[i,:] = samples.T.flatten()
             
@@ -160,10 +160,10 @@ ig = ig.detach().numpy()
 log_probs = log_probs.detach().numpy()
 all_samples = all_samples.detach().numpy()
 
-pd.DataFrame(accus).to_csv(f'{sim}/tests/accus_{sim}{add_iid}{add_h}{add_e}_r.csv')
-pd.DataFrame(covs).to_csv(f'{sim}/tests/covs_{sim}{add_iid}{add_h}{add_e}_r.csv')
-pd.DataFrame(covs_old, index=conf_levels).to_csv(f'{sim}/tests/covs_old_{sim}{add_iid}{add_h}{add_e}_r.csv')
-pd.DataFrame(ig, columns=conf_levels).to_csv(f'{sim}/tests/ig_{sim}{add_iid}{add_h}{add_e}_r.csv')
-pd.DataFrame(log_probs).to_csv(f'{sim}/tests/logprobs_{sim}{add_iid}{add_h}{add_e}_r.csv')
+pd.DataFrame(accus).to_csv(f'{sim}/tests/accus_{sim}{add_iid}{add_h}{add_e}.csv')
+pd.DataFrame(covs).to_csv(f'{sim}/tests/covs_{sim}{add_iid}{add_h}{add_e}.csv')
+pd.DataFrame(covs_old, index=conf_levels).to_csv(f'{sim}/tests/covs_old_{sim}{add_iid}{add_h}{add_e}.csv')
+pd.DataFrame(ig, columns=conf_levels).to_csv(f'{sim}/tests/ig_{sim}{add_iid}{add_h}{add_e}.csv')
+pd.DataFrame(log_probs).to_csv(f'{sim}/tests/logprobs_{sim}{add_iid}{add_h}{add_e}.csv')
 if ss:
-    pd.DataFrame(all_samples).to_csv(f'{sim}/tests/samples_{sim}{add_iid}{add_h}{add_e}_r.csv')
+    pd.DataFrame(all_samples).to_csv(f'{sim}/tests/samples_{sim}{add_iid}{add_h}{add_e}.csv')

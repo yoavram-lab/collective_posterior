@@ -17,11 +17,11 @@ class Recorder(object):
             self.gbar.append(md['g'].mean())
 
 
-def FWDPY(theta, seed=42, G=200, N=5000):
+def FWDPY(theta,G=200, N=5000):
     s, mu, rho = 10**theta
     pop = fwdpy11.DiploidPopulation(N, 1.0)
 
-    rng = fwdpy11.GSLrng(seed)
+    rng = fwdpy11.GSLrng(np.random.randint(1000))
 
     gssmo = fwdpy11.GaussianStabilizingSelection.single_trait(
         [
@@ -45,7 +45,7 @@ def FWDPY(theta, seed=42, G=200, N=5000):
 
     r = Recorder(start=0)
     fwdpy11.evolvets(rng, pop, params, G, recorder=r, suppress_table_indexing=True)
-    return np.array(r.gbar)
+    return torch.from_numpy(np.array(r.gbar))
 
 # constants
 N = int(1e7)
@@ -189,7 +189,7 @@ def WF(parameters, seed=None):
 
 def wrapper(simulator, reps, parameters, seed=None):
     rep_1 = simulator(parameters)
-    if simulator in [WF, CLASSIC_WF]:
+    if simulator in [WF, CLASSIC_WF, FWDPY]:
         rep_1 = rep_1.reshape(1,-1)
     out_reps = torch.empty((reps, rep_1.shape[1]))
     out_reps[0,:] = rep_1

@@ -8,6 +8,9 @@ from scipy.special import logsumexp
 from scipy.optimize import minimize
 from tqdm import tqdm
 
+
+# keep gradients on for all tensors
+torch.set_grad_enabled(True)
 class CollectivePosterior:
     """
     A class to represent and sample from a collective posterior distribution.
@@ -90,7 +93,7 @@ class CollectivePosterior:
         theta_dim = top_sn_samples.shape[1]
         n_per_chain = math.ceil(n_total / top_sn_samples.shape[0])
         total_steps = n_per_chain * top_sn_samples.shape[0]
-        with tqdm(total=total_steps, desc="MCMC from top SN") as global_pbar:
+        with tqdm(total=total_steps, desc="MCMC from top SN", initial=take_sn) as global_pbar:
             for idx, start in enumerate(top_sn_samples):
                 chain = [start.clone()]
                 cur_logp = log_prob_fn(start.unsqueeze(0))[0]
@@ -111,7 +114,7 @@ class CollectivePosterior:
         samples = torch.cat(all_samples, dim=0)[:n_total]
         return samples
 
-    def rejection_sample(self, n_samples, jump=int(1e4), m = -10, keep=True):
+    def rejection_sample(self, n_samples, jump=int(1e4), m = 5, keep=True):
         """
         Sample from the collective posterior using rejection sampling.
 
@@ -335,7 +338,6 @@ class CollectivePosterior:
         
     
     
-    @torch.no_grad()
     def get_log_C(self, n_reps=10, S=0.005):
         """
         Estimate log C = log ∫ u(θ) dθ via importance sampling with θ ~ p(θ),
