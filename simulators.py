@@ -173,14 +173,6 @@ def WF_wrapper(reps, parameters, seed=None):
         evo_reps[i,:] = out
     return evo_reps
 
-=======
-def FWDPY_wrapper(reps, parameters):
-    evo_reps = torch.empty(reps, 20)
-    for i in range(reps):
-        out=FWDPY(parameters)
-        evo_reps[i,:] = out
-    return evo_reps
->>>>>>> 26bf04cad3ed182f5a1997ba28c7427eadfea492
 
 def CLASSIC_WF_wrapper(reps, parameters, seed=None, generation=torch.arange(0,201,10)):
     evo_reps = torch.empty(reps, len(generation))
@@ -218,9 +210,3 @@ def SLCP_wrapper(reps, parameters):
         slcp_reps[i,:] = out
     return slcp_reps
 
-# def GORDO_wrapper(reps, parameters):
-#     gordo_reps = torch.empty(reps, 11)
-#     for i in range(reps):
-#         out=GORDO(parameters.numpy())
-#         gordo_reps[i,:] = torch.tensor(out)
-#     return gordo_reps

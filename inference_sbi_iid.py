@@ -1,5 +1,5 @@
 # inference with NPE
-from simulators import WF_wrapper, GLU_wrapper, SLCP_wrapper, CLASSIC_WF_wrapper, FWDPY_wrapper
+from simulators import WF_wrapper, GLU_wrapper, SLCP_wrapper, CLASSIC_WF_wrapper
 from inference_utils import get_prior
 import fwdpy11
 
@@ -48,7 +48,7 @@ num_sim = int(args.num_sim)
 
 sim = str(args.model)
 prior = get_prior(sim)
-model_dict = {'GLU': GLU_wrapper, 'WF': WF_wrapper, 'SLCP': SLCP_wrapper, 'CLASSIC_WF': CLASSIC_WF_wrapper, 'FWDPY': FWDPY_wrapper}
+model_dict = {'GLU': GLU_wrapper, 'WF': WF_wrapper, 'SLCP': SLCP_wrapper, 'CLASSIC_WF': CLASSIC_WF_wrapper,}
 simulator = model_dict[sim]
 
 
@@ -61,7 +61,7 @@ theta = prior.sample((num_training_samples,))
 
 # there are certainly smarter ways to construct the training data set, but we go with a
 # for loop here for illustration purposes.
-x_dim_dict = {'GLU': 10, 'WF': 12, 'SLCP': 8, 'CLASSIC_WF': 21, 'FWDPY': 20} 
+x_dim_dict = {'GLU': 10, 'WF': 12, 'SLCP': 8, 'CLASSIC_WF': 21} 
 x_dim = x_dim_dict[sim]
 
 
