@@ -55,8 +55,9 @@ posterior = pickle.load(open(posterior_dir, 'rb'))
 conf_levels = [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,0.95]
 
 # Load the test thetas
-# thetas = torch.tensor(np.array(pd.read_csv(thetas_dir, index_col=0).values.astype('float')), dtype=torch.float32)
-thetas = torch.load(thetas_dir)
+thetas = torch.tensor(np.array(pd.read_csv(thetas_dir, index_col=0).values.astype('float')), dtype=torch.float32)
+# thetas = torch.load(thetas_dir)
+
 
 def coverage_old(posterior, samples, conf_levels, theta):
     covs = torch.empty(len(conf_levels), len(theta))
