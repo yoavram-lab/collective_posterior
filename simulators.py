@@ -201,7 +201,7 @@ def wrapper(simulator, reps, parameters, seed=None):
 
 def wrapper_hierarchical(simulator, reps, parameters, var=0.02, seed=None):
     rep_1 = simulator(parameters)
-    if simulator in [WF, CLASSIC_WF]:
+    if simulator in [WF, CLASSIC_WF, FWDPY]:
         rep_1 = rep_1.reshape(1,-1)
     out_reps = torch.empty((reps, rep_1.shape[1]))
     out_reps[0,:] = rep_1

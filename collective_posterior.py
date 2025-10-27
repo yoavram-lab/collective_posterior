@@ -7,10 +7,11 @@ import torch
 from scipy.special import logsumexp
 from scipy.optimize import minimize
 from tqdm import tqdm
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
+# keep gradients off for all tensors
+torch.set_grad_enabled(False)
 
-# keep gradients on for all tensors
-torch.set_grad_enabled(True)
 class CollectivePosterior:
     """
     A class to represent and sample from a collective posterior distribution.
@@ -114,40 +115,83 @@ class CollectivePosterior:
         samples = torch.cat(all_samples, dim=0)[:n_total]
         return samples
 
-    def rejection_sample(self, n_samples, jump=int(1e4), m = 5, keep=True):
+
+# parallel version of rejection sampling
+    def rejection_sample(self, n_samples, jump=int(1e5), m = 5, keep=True, n_workers=48):
         """
-        Sample from the collective posterior using rejection sampling.
+        Sample from the collective posterior using parallel rejection sampling.
 
         Parameters:
             n_samples (int): Number of samples to generate.
             jump (int): Number of prior samples to draw in each batch. Default is 1e5.
+            m (float): Offset for the acceptance criterion. Default is 5.
             keep (bool): Whether to store the samples in the object. Default is True.
-        
+            n_workers (int): Number of parallel workers. Default is 48.
+
         Returns:
             torch.Tensor: Samples from the posterior.
         """
         samples = torch.empty((1, self.theta_dim))
         cur = 0
-
         with tqdm(total=n_samples, desc="Rejection Sampling") as pbar:
-            while cur < n_samples:
-                samps = self.prior.sample((jump,))
-                prior_probs = self.prior.log_prob(samps)
-                probs = torch.log(torch.rand(samps.size()[0]))
-                lp = self.log_prob(samps)
-                next_idx = (lp - prior_probs) > (probs+m)
-                samples_to_add = samps[next_idx]
-                samples = torch.cat([samples, samples_to_add])
-                cur += next_idx.sum()
-                pbar.update(next_idx.sum().item())  # Update the progress bar
-
+            with ThreadPoolExecutor(max_workers=n_workers) as executor:
+                futures = []
+                while cur < n_samples:
+                    futures.append(executor.submit(self._rejection_sample_batch, jump, m))
+                    # Collect results as they complete
+                    for future in as_completed(futures):
+                        samps, count = future.result()
+                        samples = torch.cat([samples, samps])
+                        cur += count
+                        pbar.update(count)
+                        futures.remove(future)
+                        if cur >= n_samples:
+                            break
         if keep:
             self.samples = samples[1:n_samples+1]
-
         return samples[1:n_samples+1]
     
+    def _rejection_sample_batch(self, jump, m):
+        samps = self.prior.sample((jump,))
+        prior_probs = self.prior.log_prob(samps)
+        probs = torch.log(torch.rand(samps.size()[0]))
+        lp = self.log_prob(samps)
+        next_idx = (lp - prior_probs) > (probs + m)
+        samples_to_add = samps[next_idx]
+        return samples_to_add, next_idx.sum().item()
+    
+    # def rejection_sample(self, n_samples, jump=int(1e4), m = 5, keep=True):
+    #     """
+    #     Sample from the collective posterior using rejection sampling.
 
+    #     Parameters:
+    #         n_samples (int): Number of samples to generate.
+    #         jump (int): Number of prior samples to draw in each batch. Default is 1e5.
+    #         keep (bool): Whether to store the samples in the object. Default is True.
+        
+    #     Returns:
+    #         torch.Tensor: Samples from the posterior.
+    #     """
+    #     samples = torch.empty((1, self.theta_dim))
+    #     cur = 0
 
+    #     with tqdm(total=n_samples, desc="Rejection Sampling") as pbar:
+    #         while cur < n_samples:
+    #             samps = self.prior.sample((jump,))
+    #             prior_probs = self.prior.log_prob(samps)
+    #             probs = torch.log(torch.rand(samps.size()[0]))
+    #             lp = self.log_prob(samps)
+    #             next_idx = (lp - prior_probs) > (probs+m)
+    #             samples_to_add = samps[next_idx]
+    #             samples = torch.cat([samples, samples_to_add])
+    #             cur += next_idx.sum()
+    #             pbar.update(next_idx.sum().item())  # Update the progress bar
+
+    #     if keep:
+    #         self.samples = samples[1:n_samples+1]
+
+    #     return samples[1:n_samples+1]
+    
     def sample_one(self, jump=int(1e5), keep=False):
         """
         Draw a single sample from the posterior.
@@ -220,8 +264,6 @@ class CollectivePosterior:
 
 #         return samples
 
-# ...existing code...
-
     def sample_multimodal(
         self,
         n_samples: int,                     # number of starting centres
@@ -272,39 +314,6 @@ class CollectivePosterior:
             self.samples = samples
         return samples
 
-# ...existing code...    
-    def sample_mcmc(self, num_samples, step_size):
-        """
-        Sample from the posterior using the Metropolis-Hastings MCMC algorithm.
-
-        Parameters:
-            num_samples (int): Number of samples to draw.
-            step_size (float): Proposal standard deviation.
-            burn_in (int): Number of initial samples to discard. Default is 1000.
-
-        Returns:
-            torch.Tensor: Samples from the posterior.
-        """
-
-        # Initialize
-        theta = self.sample_one()
-        samples = []
-        sampled = 0
-        with tqdm(total=num_samples, desc="MCMC Sampling") as pbar:
-            while sampled < num_samples:
-                proposal = theta + torch.randn_like(theta) * step_size
-                current_log_prob = self.log_prob(theta)
-                proposal_log_prob = self.log_prob(proposal)
-                acceptance_prob = torch.exp(proposal_log_prob - current_log_prob)
-
-                if torch.rand(1).item() < acceptance_prob.item():
-                    theta = proposal
-                    samples.append(theta.clone())
-                    sampled+=1
-                    pbar.update(1)  # Update the progress bar
-
-        return torch.stack(samples)
-
     
     def get_map(self, n_init=100, keep=True):
         """
@@ -332,11 +341,7 @@ class CollectivePosterior:
         if keep:
             self.map = collective_map
         return collective_map
-
-
-
         
-    
     
     def get_log_C(self, n_reps=10, S=0.005):
         """
