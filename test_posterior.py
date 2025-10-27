@@ -27,6 +27,7 @@ parser.add_argument('-m', "--model") # model name
 parser.add_argument('-p', "--posterior") # posterior directory
 parser.add_argument('-s', "--samples") # number of samples from the posterior
 parser.add_argument('-t', "--test_thetas") # test thetas directory
+parser.add_argument('-x', "--test_x") # test x directory
 parser.add_argument('-hi', "--hierarchical", action='store_true') # whether to test on hierarchical model
 parser.add_argument('-cp', "--cp", action='store_true') # whether to use collective posterior
 parser.add_argument('-e', "--ensemble", action='store_true') # whether to test on an ensemble
@@ -40,6 +41,7 @@ model_dict = {'GLU': GLU, 'WF': WF, 'SLCP': SLCP, 'CLASSIC_WF': CLASSIC_WF, 'FWD
 sim = str(args.model)
 simulator = model_dict[sim]
 thetas_dir = args.test_thetas
+x_dir = args.test_x
 posterior_dir = args.posterior
 samples = int(args.samples)
 c = args.cp
@@ -52,11 +54,13 @@ prior = get_prior(sim)
 posterior = pickle.load(open(posterior_dir, 'rb'))
 # posterior = MCMCPosterior(posterior.potential_fn, prior)
 
-conf_levels = [0.1,0.2,0.3,0.4,0.5,0.8,0.9,0.95]
+conf_levels = [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,0.95]
 
 # Load the test thetas
 # thetas = torch.tensor(np.array(pd.read_csv(thetas_dir, index_col=0).values.astype('float')), dtype=torch.float32)
-thetas = torch.load(thetas_dir)[:50]
+thetas = torch.load(thetas_dir)
+X = torch.load(x_dir)
+print(X.shape, thetas.shape)
 
 def coverage_old(posterior, samples, conf_levels, theta):
     covs = torch.empty(len(conf_levels), len(theta))
@@ -82,7 +86,7 @@ def evaluate_cp(posterior, thetas, n_samples):
     if sim == 'WF':
         epsilon = -150
     if sim == 'CLASSIC_WF' or sim == 'FWDPY':
-        epsilon = -10
+        epsilon = -5
     else:
         epsilon = -10000
     accus = torch.empty(thetas.shape)
@@ -90,27 +94,21 @@ def evaluate_cp(posterior, thetas, n_samples):
     covs_old = torch.empty(len(thetas[:,0]),len(conf_levels), len(thetas[0]))
     ig = torch.empty(len(thetas),len(conf_levels))
     log_probs = torch.empty(len(thetas),1)
-    all_samples = torch.empty(len(thetas), len(thetas[0])*n_samples)
+    all_samples = torch.empty(len(thetas), n_samples, len(thetas[0]))
     for i in range(len(thetas)):
-        if h:
-            X = wrapper_hierarchical(simulator, n_set-4, thetas[i], var = 0.1)
-            x_outlier = wrapper(simulator, 2, thetas[i]-0.25)
-            x_oo = wrapper(simulator, 2, thetas[i]+0.25)
-            X = torch.cat([X,x_outlier, x_oo])
-        else:
-            X = wrapper(simulator, n_set, thetas[i])
-        cp = CollectivePosterior(prior, amortized_posterior=posterior, log_C=1, Xs=X, epsilon=epsilon)
+        x = X[i]
+        th = thetas[i]
+        cp = CollectivePosterior(prior, amortized_posterior=posterior, log_C=1, Xs=x, epsilon=epsilon)
         cp.get_log_C()
-        samples = cp.sample_multimodal(n_samples)
+        samples = cp.rejection_sample(n_samples)
         if ss:
-            all_samples[i,:] = samples.T.flatten()
-            
-        params = torch.tensor(thetas[i,:], dtype=torch.float32)
+            all_samples[i,:,:] = samples
+        params = torch.tensor(th, dtype=torch.float32)
         accus[i] = samples.mean(0)-params
         covs[i] = (cp.log_prob(samples) > cp.log_prob(params)).sum()/n_samples
-        covs_old[i] = coverage_old(posterior, samples, conf_levels, theta=thetas[i])
+        covs_old[i] = coverage_old(posterior, samples, conf_levels, theta=th)
         ig[i] = info_gain(posterior, samples, conf_levels)
-        log_probs[i] = cp.log_prob(thetas[i]).item()
+        log_probs[i] = cp.log_prob(th).item()
         if i%10 == 9:
             print(f'{round(100*(i+1)/len(thetas),2)}%')
     return accus, covs, covs_old, ig, log_probs, all_samples
@@ -124,24 +122,19 @@ def evaluate_iid(posterior, thetas, n_samples):
     log_probs = torch.empty(len(thetas),1)
     all_samples = torch.empty(len(thetas), len(thetas[0])*n_samples)
     for i in range(len(thetas)):
-        if h:
-            X = wrapper_hierarchical(simulator, n_set-4, thetas[i], var = 0.1)
-            x_outlier = wrapper(simulator, 2, thetas[i]-0.25)
-            x_oo = wrapper(simulator, 2, thetas[i]+0.25)
-            X = torch.cat([X,x_outlier, x_oo])
-        else:
-            X = wrapper(simulator, n_set, thetas[i])
-        samples = posterior.set_default_x(X).sample((n_samples,))
+        x = X[i]
+        th = thetas[i]
+        samples = posterior.set_default_x(x).sample((n_samples,))
         if ss:
             all_samples[i,:] = samples.T.flatten()
 
-        params = torch.tensor(thetas[i,:], dtype=torch.float32)
+        params = torch.tensor(th, dtype=torch.float32)
         accus[i] = samples.mean(0)-params
         covs[i] = (posterior.potential(samples) > posterior.potential(params)).sum()/len(thetas)
-        covs_old[i] = coverage_old(posterior, samples, conf_levels, theta=thetas[i])
+        covs_old[i] = coverage_old(posterior, samples, conf_levels, theta=th)
         ig[i] = info_gain(posterior, samples, conf_levels)
-        log_probs[i] = posterior.log_prob(thetas[i]).item()
-        if i%10 == 1:
+        log_probs[i] = posterior.log_prob(th).item()
+        if i%10 == 9:
             print(f'{round(100*i/len(thetas),2)}%')
     return accus, covs, covs_old, ig, log_probs, all_samples
 
@@ -153,17 +146,17 @@ add_e = '_e' if e else ''
 
 accus, covs, covs_old, ig, log_probs, all_samples = eval_func(posterior, thetas, n_samples=samples)
 covs_old = covs_old.mean(0)
-accus = accus.detach().numpy()
-covs = covs.detach().numpy()
-covs_old = covs_old.detach().numpy()
-ig = ig.detach().numpy()
-log_probs = log_probs.detach().numpy()
-all_samples = all_samples.detach().numpy()
+# accus = accus.detach().numpy()
+# covs = covs.detach().numpy()
+# covs_old = covs_old.detach().numpy()
+# ig = ig.detach().numpy()
+# log_probs = log_probs.detach().numpy()
+# all_samples = all_samples.detach().numpy()
 
-pd.DataFrame(accus).to_csv(f'{sim}/tests/accus_{sim}{add_iid}{add_h}{add_e}.csv')
-pd.DataFrame(covs).to_csv(f'{sim}/tests/covs_{sim}{add_iid}{add_h}{add_e}.csv')
-pd.DataFrame(covs_old, index=conf_levels).to_csv(f'{sim}/tests/covs_old_{sim}{add_iid}{add_h}{add_e}.csv')
-pd.DataFrame(ig, columns=conf_levels).to_csv(f'{sim}/tests/ig_{sim}{add_iid}{add_h}{add_e}.csv')
-pd.DataFrame(log_probs).to_csv(f'{sim}/tests/logprobs_{sim}{add_iid}{add_h}{add_e}.csv')
+torch.save(accus, f'{sim}/tests/accus_{sim}{add_iid}{add_h}{add_e}_.pt')
+torch.save(covs, f'{sim}/tests/covs_{sim}{add_iid}{add_h}{add_e}_.pt')
+torch.save(covs_old, f'{sim}/tests/covs_old_{sim}{add_iid}{add_h}{add_e}_.pt')
+torch.save(ig, f'{sim}/tests/ig_{sim}{add_iid}{add_h}{add_e}_.pt')
+torch.save(log_probs, f'{sim}/tests/logprobs_{sim}{add_iid}{add_h}{add_e}_.pt')
 if ss:
-    pd.DataFrame(all_samples).to_csv(f'{sim}/tests/samples_{sim}{add_iid}{add_h}{add_e}.csv')
+    torch.save(all_samples, f'{sim}/tests/samples_{sim}{add_iid}{add_h}{add_e}_.pt')
