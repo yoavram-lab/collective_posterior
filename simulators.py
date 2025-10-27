@@ -1,51 +1,7 @@
 import numpy as np
 import torch
 import sbibm
-import fwdpy11
 
-class Recorder(object):
-    def __init__(self, start):
-        self.generation = []
-        self.gbar = []
-        self.wbar = []
-        self.start = start    
-        
-    def __call__(self, pop, sampler):
-        if pop.generation > self.start and (pop.generation % 10) == 0:
-            self.generation.append(pop.generation)
-            md=np.array(pop.diploid_metadata, copy=False)
-            self.gbar.append(md['g'].mean())
-
-
-def FWDPY(theta,G=200, N=5000):
-    s, mu, rho = 10**theta
-    pop = fwdpy11.DiploidPopulation(N, 1.0)
-
-    rng = fwdpy11.GSLrng(np.random.randint(1000))
-
-    gssmo = fwdpy11.GaussianStabilizingSelection.single_trait(
-        [
-            fwdpy11.Optimum(when=0, optimum=0.0, VS=1.0),
-            fwdpy11.Optimum(when=0, optimum=2.0, VS=1.0),
-        ]
-    )
-
-    p = {
-        "nregions": [],
-        "gvalue": fwdpy11.Additive(2.0, gssmo),
-        "sregions": [fwdpy11.ExpS(0, 1, 1, s)],
-        "recregions": [fwdpy11.PoissonInterval(0, 1., rho / float(4 * pop.N))],
-        "rates": (mu, mu, None),
-        # Keep mutations at frequency 1 in the pop if they affect fitness.
-        "prune_selected": False,
-        "demography": fwdpy11.ForwardDemesGraph.tubes([pop.N], burnin=G, burnin_is_exact=True),
-        "simlen": G,
-    }
-    params = fwdpy11.ModelParams(**p)
-
-    r = Recorder(start=0)
-    fwdpy11.evolvets(rng, pop, params, G, recorder=r, suppress_table_indexing=True)
-    return torch.from_numpy(np.array(r.gbar))
 
 # constants
 N = int(1e7)
@@ -189,7 +145,7 @@ def WF(parameters, seed=None):
 
 def wrapper(simulator, reps, parameters, seed=None):
     rep_1 = simulator(parameters)
-    if simulator in [WF, CLASSIC_WF, FWDPY]:
+    if simulator in [WF, CLASSIC_WF]:
         rep_1 = rep_1.reshape(1,-1)
     out_reps = torch.empty((reps, rep_1.shape[1]))
     out_reps[0,:] = rep_1
@@ -200,7 +156,7 @@ def wrapper(simulator, reps, parameters, seed=None):
 
 def wrapper_hierarchical(simulator, reps, parameters, var=0.02, seed=None):
     rep_1 = simulator(parameters)
-    if simulator in [WF, CLASSIC_WF, FWDPY]:
+    if simulator in [WF, CLASSIC_WF]:
         rep_1 = rep_1.reshape(1,-1)
     out_reps = torch.empty((reps, rep_1.shape[1]))
     out_reps[0,:] = rep_1
@@ -216,12 +172,6 @@ def WF_wrapper(reps, parameters, seed=None):
         evo_reps[i,:] = out
     return evo_reps
 
-def FWDPY_wrapper(reps, parameters):
-    evo_reps = torch.empty(reps, 20)
-    for i in range(reps):
-        out=torch.from_numpy(FWDPY(parameters, seed=i))
-        evo_reps[i,:] = out
-    return evo_reps
 
 def CLASSIC_WF_wrapper(reps, parameters, seed=None, generation=torch.arange(0,201,10)):
     evo_reps = torch.empty(reps, len(generation))

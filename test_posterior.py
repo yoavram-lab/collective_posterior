@@ -1,5 +1,5 @@
 # inference with NPE
-from simulators import WF, GLU, SLCP, wrapper, wrapper_hierarchical, CLASSIC_WF, FWDPY
+from simulators import WF, GLU, SLCP, wrapper, wrapper_hierarchical, CLASSIC_WF
 import torch
 import pickle
 # import time
@@ -27,7 +27,6 @@ parser.add_argument('-m', "--model") # model name
 parser.add_argument('-p', "--posterior") # posterior directory
 parser.add_argument('-s', "--samples") # number of samples from the posterior
 parser.add_argument('-t', "--test_thetas") # test thetas directory
-parser.add_argument('-x', "--test_x") # test x directory
 parser.add_argument('-hi', "--hierarchical", action='store_true') # whether to test on hierarchical model
 parser.add_argument('-cp', "--cp", action='store_true') # whether to use collective posterior
 parser.add_argument('-e', "--ensemble", action='store_true') # whether to test on an ensemble
@@ -35,13 +34,12 @@ parser.add_argument('-ss', "--save_samples", action='store_true') # whether to s
 args = parser.parse_args()
 
 
-model_dict = {'GLU': GLU, 'WF': WF, 'SLCP': SLCP, 'CLASSIC_WF': CLASSIC_WF, 'FWDPY': FWDPY}
+model_dict = {'GLU': GLU, 'WF': WF, 'SLCP': SLCP, 'CLASSIC_WF': CLASSIC_WF}
 
 # Define the prior and simulator
 sim = str(args.model)
 simulator = model_dict[sim]
 thetas_dir = args.test_thetas
-x_dir = args.test_x
 posterior_dir = args.posterior
 samples = int(args.samples)
 c = args.cp
@@ -59,8 +57,6 @@ conf_levels = [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,0.95]
 # Load the test thetas
 # thetas = torch.tensor(np.array(pd.read_csv(thetas_dir, index_col=0).values.astype('float')), dtype=torch.float32)
 thetas = torch.load(thetas_dir)
-X = torch.load(x_dir)
-print(X.shape, thetas.shape)
 
 def coverage_old(posterior, samples, conf_levels, theta):
     covs = torch.empty(len(conf_levels), len(theta))
@@ -85,8 +81,8 @@ def evaluate_cp(posterior, thetas, n_samples):
     n_set = 12
     if sim == 'WF':
         epsilon = -150
-    if sim == 'CLASSIC_WF' or sim == 'FWDPY':
-        epsilon = -5
+    if sim == 'CLASSIC_WF':
+        epsilon = -10
     else:
         epsilon = -10000
     accus = torch.empty(thetas.shape)
@@ -96,11 +92,14 @@ def evaluate_cp(posterior, thetas, n_samples):
     log_probs = torch.empty(len(thetas),1)
     all_samples = torch.empty(len(thetas), n_samples, len(thetas[0]))
     for i in range(len(thetas)):
-        x = X[i]
         th = thetas[i]
+        if h:
+            x = wrapper_hierarchical(simulator, reps=n_set, parameters=th)
+        else:
+            x = wrapper(simulator, reps=n_set, parameters=th)
         cp = CollectivePosterior(prior, amortized_posterior=posterior, log_C=1, Xs=x, epsilon=epsilon)
         cp.get_log_C()
-        samples = cp.rejection_sample(n_samples)
+        samples = cp.mcmc_from_top_sn(n_samples)
         if ss:
             all_samples[i,:,:] = samples
         params = torch.tensor(th, dtype=torch.float32)
@@ -122,8 +121,12 @@ def evaluate_iid(posterior, thetas, n_samples):
     log_probs = torch.empty(len(thetas),1)
     all_samples = torch.empty(len(thetas), len(thetas[0])*n_samples)
     for i in range(len(thetas)):
-        x = X[i]
         th = thetas[i]
+        if h:
+            x = wrapper_hierarchical(simulator, reps=n_set, parameters=th)
+        else:
+            x = wrapper(simulator, reps=n_set, parameters=th)
+        
         samples = posterior.set_default_x(x).sample((n_samples,))
         if ss:
             all_samples[i,:] = samples.T.flatten()
@@ -146,17 +149,18 @@ add_e = '_e' if e else ''
 
 accus, covs, covs_old, ig, log_probs, all_samples = eval_func(posterior, thetas, n_samples=samples)
 covs_old = covs_old.mean(0)
-# accus = accus.detach().numpy()
-# covs = covs.detach().numpy()
-# covs_old = covs_old.detach().numpy()
-# ig = ig.detach().numpy()
-# log_probs = log_probs.detach().numpy()
-# all_samples = all_samples.detach().numpy()
+accus = accus.detach().numpy()
+covs = covs.detach().numpy()
+covs_old = covs_old.detach().numpy()
+ig = ig.detach().numpy()
+log_probs = log_probs.detach().numpy()
+all_samples = all_samples.detach().numpy()
 
-torch.save(accus, f'{sim}/tests/accus_{sim}{add_iid}{add_h}{add_e}_.pt')
-torch.save(covs, f'{sim}/tests/covs_{sim}{add_iid}{add_h}{add_e}_.pt')
-torch.save(covs_old, f'{sim}/tests/covs_old_{sim}{add_iid}{add_h}{add_e}_.pt')
-torch.save(ig, f'{sim}/tests/ig_{sim}{add_iid}{add_h}{add_e}_.pt')
-torch.save(log_probs, f'{sim}/tests/logprobs_{sim}{add_iid}{add_h}{add_e}_.pt')
+
+pd.DataFrame(accus).to_csv(f'{sim}/tests/accus_{sim}{add_iid}{add_h}{add_e}_.csv')
+pd.DataFrame(covs).to_csv(f'{sim}/tests/covs_{sim}{add_iid}{add_h}{add_e}_.csv')
+pd.DataFrame(covs_old).to_csv(f'{sim}/tests/covs_old_{sim}{add_iid}{add_h}{add_e}_.csv')
+pd.DataFrame(ig).to_csv(f'{sim}/tests/ig_{sim}{add_iid}{add_h}{add_e}_.csv')
+pd.DataFrame(log_probs).to_csv(f'{sim}/tests/logprobs_{sim}{add_iid}{add_h}{add_e}_.csv')
 if ss:
-    torch.save(all_samples, f'{sim}/tests/samples_{sim}{add_iid}{add_h}{add_e}_.pt')
+    pd.DataFrame(all_samples).to_csv(f'{sim}/tests/samples_{sim}{add_iid}{add_h}{add_e}_.csv')
