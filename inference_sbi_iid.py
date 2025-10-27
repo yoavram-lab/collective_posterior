@@ -52,7 +52,7 @@ model_dict = {'GLU': GLU_wrapper, 'WF': WF_wrapper, 'SLCP': SLCP_wrapper, 'CLASS
 simulator = model_dict[sim]
 
 
-max_num_trials = 12
+max_num_trials = 10
   
 # construct training data set: we want to cover the full range of possible number of
 # trials
@@ -79,8 +79,8 @@ results = Parallel(n_jobs=100)(delayed(simulate_and_fill)(i) for i in range(num_
 x = torch.stack([row for sublist in results for row in sublist])
 
 theta = theta.repeat_interleave(max_num_trials, dim=0)
-torch.save(theta, f'{sim}/theta_train_iid.pt')
-print(f'Saved theta to {sim}/theta_train_iid.pt')
+torch.save(theta, f'{sim}/theta_train_iid_.pt')
+print(f'Saved theta to {sim}/theta_train_iid_.pt')
 # inference
 from sbi.neural_nets import posterior_nn
 from sbi.neural_nets.embedding_nets import FCEmbedding, PermutationInvariantEmbedding

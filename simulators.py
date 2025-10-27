@@ -72,6 +72,7 @@ def CLASSIC_WF(parameters, seed=None, generation=torch.arange(0,201,10, dtype=in
     """
     # SNV parameters
     s, m, N = 10**parameters.numpy()
+    N = int(N)
     
     if seed is not None:
         np.random.seed(seed=seed)
@@ -219,7 +220,7 @@ def WF_wrapper(reps, parameters, seed=None):
 def FWDPY_wrapper(reps, parameters):
     evo_reps = torch.empty(reps, 20)
     for i in range(reps):
-        out=torch.from_numpy(FWDPY(parameters, seed=i))
+        out=FWDPY(parameters)
         evo_reps[i,:] = out
     return evo_reps
 
