@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 import sbibm
-
+from evo_sim import evo_sim
 # constants
 N = int(1e7)
 generation = np.array([8, 21, 29, 37, 50, 58, 66, 79, 87, 95, 108, 116]) # from Chuong et al 2024
@@ -85,7 +85,7 @@ def WF(parameters, seed=None):
 
 def wrapper(simulator, reps, parameters, seed=None):
     rep_1 = simulator(parameters)
-    if simulator in [WF, CLASSIC_WF]:
+    if simulator in [WF, evo_sim]:
         rep_1 = rep_1.reshape(1,-1)
     out_reps = torch.empty((reps, rep_1.shape[1]))
     out_reps[0,:] = rep_1
@@ -96,7 +96,7 @@ def wrapper(simulator, reps, parameters, seed=None):
 
 def wrapper_hierarchical(simulator, reps, parameters, var=0.02, seed=None):
     rep_1 = simulator(parameters)
-    if simulator in [WF, CLASSIC_WF]:
+    if simulator in [WF, evo_sim]:
         rep_1 = rep_1.reshape(1,-1)
     out_reps = torch.empty((reps, rep_1.shape[1]))
     out_reps[0,:] = rep_1

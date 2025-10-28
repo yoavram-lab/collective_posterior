@@ -1,5 +1,6 @@
 # inference with NPE
-from simulators import WF, GLU, SLCP, wrapper, wrapper_hierarchical, CLASSIC_WF
+from simulators import WF, GLU, SLCP, wrapper, wrapper_hierarchical
+from evo_sim import evo_sim
 import torch
 import pickle
 # import time
@@ -33,7 +34,7 @@ parser.add_argument('-e', "--ending", default='') # ending for file names
 args = parser.parse_args()
 
 
-model_dict = {'GLU': GLU, 'WF': WF, 'SLCP': SLCP, 'CLASSIC_WF': CLASSIC_WF}
+model_dict = {'GLU': GLU, 'WF': WF, 'SLCP': SLCP, 'EVO_SIM': evo_sim}
 
 # Define the prior and simulator
 sim = str(args.model)
@@ -73,7 +74,7 @@ def coverage_old(posterior, samples, conf_levels, theta):
 def evaluate(posterior, thetas, n_samples, cp = False):
     if sim == 'WF':
         epsilon = -150
-    if sim == 'CLASSIC_WF':
+    if sim == 'EVO_SIM':
         epsilon = -10
     else:
         epsilon = -10000
@@ -86,7 +87,7 @@ def evaluate(posterior, thetas, n_samples, cp = False):
         if cp:
             cp = CollectivePosterior(prior, amortized_posterior=posterior, log_C=1, Xs=x, epsilon=epsilon)
             cp.get_log_C()
-            samples = cp.mcmc_from_top_sn(n_samples, take_sn=50)
+            samples = cp.mcmc_from_top_sn(n_samples)
         else:
             samples = posterior.set_default_x(x).sample((n_samples,))
         all_samples[i,:,:] = samples
@@ -104,6 +105,6 @@ add_h = '_h' if h else ''
 accus, covs, all_samples = evaluate(posterior, thetas, n_samples=samples, cp=c)
 
 
-torch.save(accus, f'{sim}/tests/accus_{sim}{add_iid}{add_h}{ending}.pt')
-torch.save(covs, f'{sim}/tests/covs_{sim}{add_iid}{add_h}{ending}.pt')
-torch.save(all_samples, f'{sim}/tests/samples_{sim}{add_iid}{add_h}{ending}.pt')
+torch.save(accus, f'{sim}/accus_{sim}{add_iid}{add_h}{ending}.pt')
+torch.save(covs, f'{sim}/covs_{sim}{add_iid}{add_h}{ending}.pt')
+torch.save(all_samples, f'{sim}/samples_{sim}{add_iid}{add_h}{ending}.pt')
