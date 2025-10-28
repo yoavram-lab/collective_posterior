@@ -16,7 +16,7 @@ def CLASSIC_WF(parameters, seed=None, generation=torch.arange(1,151,10, dtype=in
     
     Parameters
     -------------------
-    N : int = 
+    N : int = 10_000
         population size  
     s : float
         fitness benefit of mutations  
@@ -27,7 +27,7 @@ def CLASSIC_WF(parameters, seed=None, generation=torch.arange(1,151,10, dtype=in
     seed : int
     """
     # SNV parameters
-    s, m, N = 10**parameters.numpy()
+    s, m = 10**parameters.numpy()
     N = int(1e4)
     
     if seed is not None:
