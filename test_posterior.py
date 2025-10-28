@@ -29,6 +29,7 @@ parser.add_argument('-s', "--samples") # number of samples from the posterior
 parser.add_argument('-t', "--test_thetas") # test thetas directory
 parser.add_argument('-x', "--test_x") # test x directory
 parser.add_argument('-cp', "--cp", action='store_true') # whether to use collective posterior
+parser.add_argument('-e', "--ending", default='') # ending for file names
 args = parser.parse_args()
 
 
@@ -43,6 +44,7 @@ posterior_dir = args.posterior
 samples = int(args.samples)
 c = args.cp
 h = x_dir[-4] == 'h'
+ending = args.ending
 
 # Load the posterior with pickle
 prior = get_prior(sim)
@@ -99,6 +101,6 @@ add_h = '_h' if h else ''
 accus, covs, all_samples = evaluate(posterior, thetas, n_samples=samples, cp=c)
 
 
-torch.save(accus, f'{sim}/tests/accus_{sim}{add_iid}{add_h}.pt')
-torch.save(covs, f'{sim}/tests/covs_{sim}{add_iid}{add_h}.pt')
-torch.save(all_samples, f'{sim}/tests/samples_{sim}{add_iid}{add_h}.pt')
+torch.save(accus, f'{sim}/tests/accus_{sim}{add_iid}{add_h}{ending}.pt')
+torch.save(covs, f'{sim}/tests/covs_{sim}{add_iid}{add_h}{ending}.pt')
+torch.save(all_samples, f'{sim}/tests/samples_{sim}{add_iid}{add_h}{ending}.pt')
