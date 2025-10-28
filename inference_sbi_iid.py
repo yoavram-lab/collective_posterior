@@ -1,5 +1,6 @@
 # inference with NPE
-from simulators import WF_wrapper, GLU_wrapper, SLCP_wrapper, CLASSIC_WF_wrapper
+from simulators import WF_wrapper, GLU_wrapper, SLCP_wrapper
+from evo_sim import EVO_SIM_wrapper
 from inference_utils import get_prior
 import fwdpy11
 
@@ -48,7 +49,7 @@ num_sim = int(args.num_sim)
 
 sim = str(args.model)
 prior = get_prior(sim)
-model_dict = {'GLU': GLU_wrapper, 'WF': WF_wrapper, 'SLCP': SLCP_wrapper, 'CLASSIC_WF': CLASSIC_WF_wrapper}
+model_dict = {'GLU': GLU_wrapper, 'WF': WF_wrapper, 'SLCP': SLCP_wrapper, 'EVO_SIM': EVO_SIM_wrapper}
 simulator = model_dict[sim]
 
 
@@ -61,7 +62,7 @@ theta = prior.sample((num_training_samples,))
 
 # there are certainly smarter ways to construct the training data set, but we go with a
 # for loop here for illustration purposes.
-x_dim_dict = {'GLU': 10, 'WF': 12, 'SLCP': 8, 'CLASSIC_WF': 15} 
+x_dim_dict = {'GLU': 10, 'WF': 12, 'SLCP': 8, 'EVO_SIM': 30} 
 x_dim = x_dim_dict[sim]
 
 
@@ -79,8 +80,8 @@ results = Parallel(n_jobs=100)(delayed(simulate_and_fill)(i) for i in range(num_
 x = torch.stack([row for sublist in results for row in sublist])
 
 theta = theta.repeat_interleave(max_num_trials, dim=0)
-torch.save(theta, f'{sim}/theta_train_iid_.pt')
-print(f'Saved theta to {sim}/theta_train_iid_.pt')
+# torch.save(theta, f'{sim}/theta_train_iid.pt')
+# print(f'Saved theta to {sim}/theta_train_iid.pt')
 # inference
 from sbi.neural_nets import posterior_nn
 from sbi.neural_nets.embedding_nets import FCEmbedding, PermutationInvariantEmbedding

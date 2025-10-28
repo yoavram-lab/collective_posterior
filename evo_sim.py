@@ -1,6 +1,7 @@
 import numpy as np
 from dataclasses import dataclass
 from typing import Tuple, Dict, List
+import torch
 
 @dataclass
 class SimConfig:
@@ -140,3 +141,11 @@ def evo_sim(theta):
     )
     v = simulate_three_mutations_vec30(cfg)
     return v
+
+
+def EVO_SIM_wrapper(reps, parameters, seed=None):
+    evo_reps = torch.empty(reps, 30)
+    for i in range(reps):
+        out=evo_sim(parameters)
+        evo_reps[i,:] = torch.tensor(out)
+    return evo_reps
