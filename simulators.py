@@ -173,7 +173,7 @@ def WF_wrapper(reps, parameters, seed=None):
         evo_reps[i,:] = out
     return evo_reps
 
-def CLASSIC_WF_wrapper(reps, parameters, seed=None, generation=torch.arange(0,201,10)):
+def CLASSIC_WF_wrapper(reps, parameters, seed=None, generation=torch.arange(1,151,10)):
     evo_reps = torch.empty(reps, len(generation))
     for i in range(reps):
         out= CLASSIC_WF(parameters, seed=seed)
