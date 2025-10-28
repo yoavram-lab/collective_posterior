@@ -55,8 +55,8 @@ posterior = pickle.load(open(posterior_dir, 'rb'))
 conf_levels = [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,0.95]
 
 # Load the test thetas
-thetas = torch.tensor(np.array(pd.read_csv(thetas_dir, index_col=0).values.astype('float')), dtype=torch.float32)
-# thetas = torch.load(thetas_dir)
+# thetas = torch.tensor(np.array(pd.read_csv(thetas_dir, index_col=0).values.astype('float')), dtype=torch.float32)
+thetas = torch.load(thetas_dir)
 
 
 def coverage_old(posterior, samples, conf_levels, theta):
@@ -95,11 +95,9 @@ def evaluate_cp(posterior, thetas, n_samples):
     for i in range(len(thetas)):
         th = thetas[i]
         if h:
-            x_h = wrapper_hierarchical(simulator, reps=3, parameters=th, var=0.2)
-            x = wrapper(simulator, reps=n_set-3, parameters=th)
-            x = torch.cat((x_h, x), dim=0)
+            x_h = wrapper_hierarchical(simulator, reps=n_set, parameters=th, var=0.25, seed=i)
         else:
-            x = wrapper(simulator, reps=n_set, parameters=th)
+            x = wrapper(simulator, reps=n_set, parameters=th, seed=i)
         cp = CollectivePosterior(prior, amortized_posterior=posterior, log_C=1, Xs=x, epsilon=epsilon)
         cp.get_log_C()
         samples = cp.mcmc_from_top_sn(n_samples, take_sn=50)
@@ -126,11 +124,9 @@ def evaluate_iid(posterior, thetas, n_samples):
     for i in range(len(thetas)):
         th = thetas[i]
         if h:
-            x = wrapper_hierarchical(simulator, reps=n_set, parameters=th)
+            x = wrapper_hierarchical(simulator, reps=n_set, parameters=th, var=0.25)
         else:
-            x_h = wrapper_hierarchical(simulator, reps=3, parameters=th, var=0.2)
-            x = wrapper(simulator, reps=n_set-3, parameters=th)
-            x = torch.cat((x_h, x), dim=0)
+            x = wrapper(simulator, reps=n_set, parameters=th)
         
         samples = posterior.set_default_x(x).sample((n_samples,))
         if ss:
