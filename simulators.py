@@ -2,71 +2,10 @@ import numpy as np
 import torch
 import sbibm
 
-
 # constants
 N = int(1e7)
 generation = np.array([8, 21, 29, 37, 50, 58, 66, 79, 87, 95, 108, 116]) # from Chuong et al 2024
         
-
-
-def CLASSIC_WF(parameters, seed=None, generation=torch.arange(1,151,10, dtype=int)):
-    """ Classic WF evolution simulator
-    Simulates evolutionary dynamics for x generations
-    Returns proportion of the population with a mutation for specific generations
-    
-    Parameters
-    -------------------
-    N : int = 10_000
-        population size  
-    s : float
-        fitness benefit of mutations  
-    m : float 
-        probability mutation to mutation   
-    generation : np.array, 1d 
-        with generations to output
-    seed : int
-    """
-    # SNV parameters
-    s, m = 10**parameters.numpy()
-    N = int(1e4)
-    
-    if seed is not None:
-        np.random.seed(seed=seed)
-    else:
-        np.random.seed()
-
-    
-    # Order is: wt, snv
-    
-    w = np.array([1, 1 + s], dtype='float64')
-    S = np.diag(w)
-    
-    # make transition rate array
-    M = np.array([[1 - m, 0],
-                [m, 1]], dtype='float64')
-    assert np.allclose(M.sum(axis=0), 1)
-    
-    
-    # mutation and selection
-    E = M @ S
-
-    # rows are genotypes, p has proportions after initial (unreported) growth
-    n = np.zeros(2)
-    n[0] = N # wt
-
-    # follow proportion of the population with mutation
-    # here rows will be generation, columns (there is only one) is replicate population
-    p_mut = []
-    
-    # run simulation to generation _max
-    for t in range(int(generation.max()+1)):    
-        p = n/N  # counts to frequencies
-        p_mut.append(p[1])  # frequency of reported mutations
-        p = E @ p.reshape((2, 1))  # natural selection + mutation        
-        p /= p.sum()  # rescale proportions
-        n = np.random.multinomial(N, np.ndarray.flatten(p)) # random genetic drift
-    ret = np.transpose(p_mut)[generation.numpy().astype(int)]
-    return torch.tensor(ret)
 
 
 def WF(parameters, seed=None):
@@ -173,12 +112,6 @@ def WF_wrapper(reps, parameters, seed=None):
         evo_reps[i,:] = out
     return evo_reps
 
-def CLASSIC_WF_wrapper(reps, parameters, seed=None, generation=torch.arange(1,151,10)):
-    evo_reps = torch.empty(reps, len(generation))
-    for i in range(reps):
-        out= CLASSIC_WF(parameters, seed=seed)
-        evo_reps[i,:] = out
-    return evo_reps
 
 glu_task = sbibm.get_task('gaussian_linear_uniform')
 glu_simulator = glu_task.get_simulator()

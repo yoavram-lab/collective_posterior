@@ -11,10 +11,10 @@ def get_prior(sim):
         prior = sbibm.get_task('gaussian_linear_uniform').get_prior_dist()
     elif sim == 'SLCP':
         prior = sbibm.get_task('slcp').get_prior_dist()
-    elif sim == 'FWDPY':
-        prior = BoxUniform(low=torch.tensor([-2, -6, 1]), high=torch.tensor([-0.5, -3, 4]))
-    elif sim == 'CLASSIC_WF':
-        prior = BoxUniform(low=torch.tensor([-2.5, -7]), high=torch.tensor([-0.5, -3]))
+    elif sim == 'EVO_SIM':
+        prior_low = torch.tensor([-3.0, -3.0, -3.0, -8.0, -8.0, -8.0])
+        prior_high = torch.tensor([-1, -1, -1, -4, -4, -4])
+        prior = BoxUniform(low=prior_low, high=prior_high)
     else:
         raise ValueError('Unknown simulator')
 
