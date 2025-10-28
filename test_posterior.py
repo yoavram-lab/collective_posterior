@@ -50,8 +50,8 @@ ending = args.ending
 prior = get_prior(sim)
 posterior = pickle.load(open(posterior_dir, 'rb'))
 
-if h and not c:
-    posterior = MCMCPosterior(posterior.potential_fn, proposal=prior)
+# if h and not c:
+    # posterior = MCMCPosterior(posterior.potential_fn, proposal=prior)
 
 conf_levels = [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,0.95]
 
