@@ -14,7 +14,7 @@ def get_prior(sim):
     elif sim == 'FWDPY':
         prior = BoxUniform(low=torch.tensor([-2, -6, 1]), high=torch.tensor([-0.5, -3, 4]))
     elif sim == 'CLASSIC_WF':
-        prior = BoxUniform(low=torch.tensor([-3.0, -9, 5]), high=torch.tensor([-0.5, -4, 8]))
+        prior = BoxUniform(low=torch.tensor([-2.5, -7]), high=torch.tensor([-0.5, -3]))
     else:
         raise ValueError('Unknown simulator')
 

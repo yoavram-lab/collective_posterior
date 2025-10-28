@@ -9,7 +9,7 @@ generation = np.array([8, 21, 29, 37, 50, 58, 66, 79, 87, 95, 108, 116]) # from 
         
 
 
-def CLASSIC_WF(parameters, seed=None, generation=torch.arange(0,201,10, dtype=int)):
+def CLASSIC_WF(parameters, seed=None, generation=torch.arange(1,151,10, dtype=int)):
     """ Classic WF evolution simulator
     Simulates evolutionary dynamics for x generations
     Returns proportion of the population with a mutation for specific generations
@@ -28,7 +28,7 @@ def CLASSIC_WF(parameters, seed=None, generation=torch.arange(0,201,10, dtype=in
     """
     # SNV parameters
     s, m, N = 10**parameters.numpy()
-    N = int(N)
+    N = int(1e4)
     
     if seed is not None:
         np.random.seed(seed=seed)
