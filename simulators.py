@@ -4,7 +4,7 @@ import sbibm
 from evo_sim import evo_sim
 # constants
 N = int(1e7)
-generation = np.array([8, 21, 29, 37, 50, 58, 66, 79, 87, 95, 108, 116]) # from Chuong et al 2024
+generation = np.array([8, 21, 29, 37, 50, 58, 66, 79, 87, 95, 108, 116]) # from Chuong et al 2025
         
 
 

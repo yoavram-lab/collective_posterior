@@ -87,7 +87,7 @@ def evaluate(posterior, thetas, n_samples, cp = False):
         if cp:
             cp = CollectivePosterior(prior, amortized_posterior=posterior, log_C=1, Xs=x, epsilon=epsilon)
             cp.get_log_C()
-            samples = cp.mcmc_from_top_sn(n_samples)
+            samples = cp.sample(n_samples)
         else:
             samples = posterior.set_default_x(x).sample((n_samples,))
         all_samples[i,:,:] = samples

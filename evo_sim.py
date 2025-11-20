@@ -2,6 +2,7 @@ import numpy as np
 from dataclasses import dataclass
 from typing import Tuple, Dict, List
 import torch
+import matplotlib.pyplot as plt
 
 @dataclass
 class SimConfig:
@@ -95,7 +96,7 @@ def simulate_three_mutations(cfg: SimConfig) -> Dict[str, np.ndarray]:
 
         p_sel = weights / weights.sum()
 
-        # Draw number of offspring from each parent genotype
+        # Draw number of offspring from each parent genotype (given constant population size)
         offspring_from_parent = rng.multinomial(cfg.N, p_sel)  # [8]
 
         # Mutation: each parent g produces children distributed across h via M[g,:]
@@ -149,3 +150,38 @@ def EVO_SIM_wrapper(reps, parameters, seed=None):
         out=evo_sim(parameters)
         evo_reps[i,:] = torch.tensor(out)
     return evo_reps
+
+
+def plot_vec30(
+    vec30: np.ndarray,
+    sample_every: int = 100,
+    gens: int = 1000,
+    order: str = "blocked",  # "blocked" = [10 for mut1][10 for mut2][10 for mut3]
+                              # "interleaved" = [mut1_t100,mut2_t100,mut3_t100, mut1_t200,...]
+    labels = ("Mutation 1", "Mutation 2", "Mutation 3"),
+    title: str = "Three mutations (allele frequencies)",
+    ax = None
+):
+    vec30 = np.asarray(vec30, dtype=float)
+    if vec30.shape != (30,):
+        raise ValueError(f"vec30 must have shape (30,), got {vec30.shape}")
+
+    times = np.arange(sample_every, gens + 1, sample_every)  # 100..1000 (10 points)
+
+    if order == "blocked":
+        f1, f2, f3 = vec30[:10], vec30[10:20], vec30[20:30]
+    elif order == "interleaved":
+        # reshape to [10,3] with columns = (mut1,mut2,mut3)
+        F = vec30.reshape(10, 3)
+        f1, f2, f3 = F[:, 0], F[:, 1], F[:, 2]
+    else:
+        raise ValueError('order must be "blocked" or "interleaved"')
+
+    ax.plot(times, f1, label=labels[0], color='red')
+    ax.plot(times, f2, label=labels[1], color='blue', ls='--')
+    ax.plot(times, f3, label=labels[2], color='green', ls=':')
+    ax.set_xlabel("Generation")
+    ax.set_ylabel("Allele frequency")
+    ax.set_title(title)
+    plt.tight_layout()
+

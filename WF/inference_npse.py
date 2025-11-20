@@ -6,9 +6,6 @@ import torch
 # import seaborn as sns
 import numpy as np
 import sys  
-sys.path.insert(1, '../')
-from collective_posterior import CollectivePosterior
-
 import warnings
 warnings.simplefilter('ignore', Warning)
 
@@ -121,10 +118,6 @@ def wrapper_hierarchical(simulator, reps, parameters, var=0.02, seed=None):
     return evo_reps
 
 
-
-def count_parameters(model):
-    return sum(p.numel() for p in model.parameters() if p.requires_grad)
-
 # Check prior, return PyTorch prior.
 prior = BoxUniform(low=torch.tensor([-2, -7, -8]), high=torch.tensor([0, -2, -2]))
 prior, num_parameters, prior_returns_numpy = process_prior(prior)
@@ -137,14 +130,17 @@ simulator = process_simulator(WF, prior, prior_returns_numpy)
 # Consistency check after making ready for sbi.
 check_sbi_inputs(simulator, prior)
 
-num_sims = 30
+num_sims = 30_000
 
 theta = prior.sample((num_sims,))
 x = simulator(theta)
 inference = NPSE(prior, sde_type="ve")
-print(count_parameters(inference.score_estimator))
+
+# def count_parameters(model):
+#     return sum(p.numel() for p in model.parameters() if p.requires_grad)
+# print(count_parameters(inference.score_estimator))
 _ = inference.append_simulations(theta, x).train()
-posterior_npse = inference.build_posterior()
+posterior_npse = inference.build_posterior(sample_with='sde')
 
 
 
@@ -154,7 +150,7 @@ for k in range(len(lines)):
     line = lines[k]
     Xs = pd.read_csv(f'empirical_data/{line}.csv', index_col=0) # observations
     X = torch.tensor(np.array(Xs), dtype=torch.float32)
-    samples_npse = posterior_npse.set_default_x(X).sample((20,))
+    samples_npse = posterior_npse.set_default_x(X).sample((100,))
     torch.save(samples_npse, f'samples_npse_{line}_noisy.pt')
 
     
@@ -178,7 +174,7 @@ def evaluate(posterior, thetas, n_samples, h=False):
     return all_samples
 
 
-all_samples = evaluate(posterior_npse, thetas, 400)
-pd.DataFrame(all_samples).to_csv(f'tests/samples_WF_npse.csv')
-all_samples = evaluate(posterior_npse, thetas, 400, h=True)
-pd.DataFrame(all_samples).to_csv(f'tests/samples_WF_npse_h.csv')
+# all_samples = evaluate(posterior_npse, thetas, 400)
+# pd.DataFrame(all_samples).to_csv(f'tests/samples_WF_npse.csv')
+# all_samples = evaluate(posterior_npse, thetas, 400, h=True)
+# pd.DataFrame(all_samples).to_csv(f'tests/samples_WF_npse_h.csv')

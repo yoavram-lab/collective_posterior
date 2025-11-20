@@ -8,9 +8,8 @@ from scipy.special import logsumexp
 from scipy.optimize import minimize
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Callable, Optional, Tuple, Dict
 
-# keep gradients off for all tensors
-torch.set_grad_enabled(False)
 
 class CollectivePosterior:
     """
@@ -27,21 +26,23 @@ class CollectivePosterior:
         from_sbi: Whether the posterior is from the sbi library. Default is True.
     """
        
-    def __init__(self, prior, Xs, amortized_posterior=None, log_C=1, epsilon=-10000, n_eval = int(1e5), sample_var=0.05, posterior_list=[]):
-        self.prior = prior 
+
+    def __init__(self, prior, Xs, amortized_posterior=None, log_C=1, epsilon=-10000,
+                 n_eval=int(1e5), sample_var=0.05, posterior_list=[]):
+        self.prior = prior
         self.amortized_posterior = amortized_posterior
-        self.Xs = Xs 
-        self.log_C = log_C 
-        self.epsilon = epsilon 
-        self.map = None 
-        self.samples = torch.empty((0, prior.sample().shape[0])) 
+        self.Xs = Xs
+        self.log_C = log_C
+        self.epsilon = epsilon
+        self.map = None
+        self.samples = torch.empty((0, prior.sample().shape[0]))
         self.theta_dim = prior.sample().shape[0]
         self.n_eval = n_eval
-        self.sample_var = sample_var 
+        self.sample_var = sample_var
         self.posterior_list = posterior_list
-        
-        assert(len(posterior_list) > 0 or amortized_posterior!=None)
-    
+        assert (len(posterior_list) > 0 or amortized_posterior is not None)
+
+
     def log_prob(self, theta):
         """
         Compute log q_coll(theta) = sum_i log q_i(theta|x_i) - (r-1) log p(theta) - log C
@@ -73,15 +74,15 @@ class CollectivePosterior:
         return sum_logq - (r - 1) * logp - self.log_C
 
 
-    def sample(self, n_samples, jump=int(1e5), keep=True, method='rejection'):
-        if len(self.samples) >= n_samples:
-            print(f"Sampled {len(self.samples)} points, returning top {n_samples}.")
-            return self.samples[:n_samples]
-        method_dict = {'rejection': self.rejection_sample,'mixed': self.sample_multimodal}
-        return method_dict[method](n_samples, jump, keep)
+    def sample(self, n_samples, keep=True, step_size=0.05, take_sn=50, jump=1e5, m=1.5, num_workers=24, method='mcmc'):
+        if method == 'mcmc':
+            return self.mcmc_from_top_sn(n_total=n_samples, step_size=step_size, take_sn=take_sn)
+        elif method == 'rejection':
+            return self.rejection_sample(n_samples, jump=jump, m=m, keep=keep, n_workers=num_workers)
+        else:
+            raise ValueError(f"Unknown sampling method: {method}")
 
-
-    def mcmc_from_top_sn(self, n_total=1000, step_size=0.05, take_sn=100):
+    def mcmc_from_top_sn(self, n_total=1000, step_size=0.05, take_sn=50):
         """
         Run independent Metropolis-Hastings chains from each top SN sample in self.samples.
         n_total: total number of samples to generate (will be split across chains).
@@ -94,7 +95,7 @@ class CollectivePosterior:
         theta_dim = top_sn_samples.shape[1]
         n_per_chain = math.ceil(n_total / top_sn_samples.shape[0])
         total_steps = n_per_chain * top_sn_samples.shape[0]
-        with tqdm(total=total_steps, desc="MCMC from top SN", initial=take_sn) as global_pbar:
+        with tqdm(total=total_steps, desc=f"MCMC from top {take_sn} candidates", initial=take_sn) as global_pbar:
             for idx, start in enumerate(top_sn_samples):
                 chain = [start.clone()]
                 cur_logp = log_prob_fn(start.unsqueeze(0))[0]
@@ -117,7 +118,7 @@ class CollectivePosterior:
 
 
 # parallel version of rejection sampling
-    def rejection_sample(self, n_samples, jump=int(1e5), m = 5, keep=True, n_workers=48):
+    def rejection_sample(self, n_samples, jump=int(1e5), m = 1.5, keep=True, n_workers=48):
         """
         Sample from the collective posterior using parallel rejection sampling.
 
@@ -385,4 +386,6 @@ class CollectivePosterior:
         if len(self.samples) > 0:
             sorted_indices = self.log_prob(self.samples).argsort(descending=True)
             self.samples = self.samples[sorted_indices]
+
         return self.log_C
+
