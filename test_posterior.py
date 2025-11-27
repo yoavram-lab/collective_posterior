@@ -1,21 +1,12 @@
-# inference with NPE
-from simulators import WF, GLU, SLCP, wrapper, wrapper_hierarchical
+# Test the collective posterior estimators
+from simulators import WF, GLU, SLCP
 from evo_sim import evo_sim
 import torch
 import pickle
-# import time
 import argparse
-from sbi.utils.user_input_checks import (
-    check_sbi_inputs,
-    process_prior,
-    process_simulator,
-)
-import numpy as np
-import pandas as pd
 from collective_posterior import CollectivePosterior
 from inference_utils import get_prior
 
-from sbi.inference import MCMCPosterior
 
 torch.set_num_threads(80)
 
@@ -34,6 +25,7 @@ parser.add_argument('-e', "--ending", default='') # ending for file names
 args = parser.parse_args()
 
 
+# extract simulator
 model_dict = {'GLU': GLU, 'WF': WF, 'SLCP': SLCP, 'EVO_SIM': evo_sim}
 
 # Define the prior and simulator
@@ -51,15 +43,13 @@ ending = args.ending
 prior = get_prior(sim)
 posterior = pickle.load(open(posterior_dir, 'rb'))
 
-# if h and not c:
-    # posterior = MCMCPosterior(posterior.potential_fn, proposal=prior)
+conf_levels = [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,0.95] # for coverage
 
-conf_levels = [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,0.95]
-
-# Load the test thetas
+# Load the test thetas and Xs
 thetas = torch.load(thetas_dir)
 X = torch.load(x_dir)
 
+# Per-parameter coverages, for deeper diagnostics
 def coverage_old(posterior, samples, conf_levels, theta):
     covs = torch.empty(len(conf_levels), len(theta))
     for j in range(len(conf_levels)):
@@ -70,7 +60,7 @@ def coverage_old(posterior, samples, conf_levels, theta):
     
     return covs
 
-    
+# main function - evaluating the estimator
 def evaluate(posterior, thetas, n_samples, cp = False):
     if sim == 'WF':
         epsilon = -150
@@ -98,12 +88,15 @@ def evaluate(posterior, thetas, n_samples, cp = False):
             print(f'{round(100*(i+1)/len(thetas),2)}%')
     return accus, covs, all_samples
 
-add_iid = '' if c else '_iid'
-add_h = '_h' if h else ''
 
 
 accus, covs, all_samples = evaluate(posterior, thetas, n_samples=samples, cp=c)
 
+
+# Saving details
+
+add_iid = '' if c else '_iid'
+add_h = '_h' if h else ''
 
 torch.save(accus, f'{sim}/accus_{sim}{add_iid}{add_h}{ending}.pt')
 torch.save(covs, f'{sim}/covs_{sim}{add_iid}{add_h}{ending}.pt')

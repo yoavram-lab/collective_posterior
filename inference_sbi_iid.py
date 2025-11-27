@@ -1,17 +1,16 @@
-# inference with NPE
+### inference with NPE + Permutation Invariant Embedding (PIE) ###
+# Same as inference.py, and follows sbi's tutorial on NPE+PIE
+
 from simulators import WF_wrapper, GLU_wrapper, SLCP_wrapper
 from evo_sim import EVO_SIM_wrapper
 from inference_utils import get_prior
-import fwdpy11
 
-from sbi.utils import BoxUniform
 import torch
 from joblib import Parallel, delayed
 import pickle
 from time import time
 import argparse
-import sbibm
-from sbi.inference import NPE, simulate_for_sbi
+from sbi.inference import NPE
 
 # Suppress warnings containing 'NaN'
 import warnings
@@ -29,6 +28,8 @@ from sbi.utils.user_input_checks import (
 )
 
 
+# Maximal number of replicates in the observation set
+max_num_trials = 10
 
 # time
 start = time()
@@ -53,7 +54,6 @@ model_dict = {'GLU': GLU_wrapper, 'WF': WF_wrapper, 'SLCP': SLCP_wrapper, 'EVO_S
 simulator = model_dict[sim]
 
 
-max_num_trials = 10
   
 # construct training data set: we want to cover the full range of possible number of
 # trials

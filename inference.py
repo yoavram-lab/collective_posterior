@@ -1,7 +1,16 @@
-# inference with NPE
+### inference for single observations with NPE ###
+# This scripts simulates n simulations from simulator m, 
+# then trains NPE (maf) with stopping condition of 20 unimproved epochs.
+# This posterior is then the base (individual posterior estimator) for the collective posterior distriburtion.
+
+# Simulators
 from simulators import WF, GLU, SLCP
 from evo_sim import evo_sim
+
+# Priors
 from inference_utils import get_prior
+
+# utilities
 import torch
 import pickle
 import time
@@ -15,6 +24,7 @@ from sbi.utils.user_input_checks import (
     process_simulator,
 )
 
+# Parallelize simulations
 torch.set_num_threads(80)
 
 #### arguments ####
@@ -27,15 +37,18 @@ args = parser.parse_args()
 # time
 start = time.time()
 
+# get simulator
 model_dict = {'GLU': GLU, 'WF': WF, 'SLCP': SLCP, 'EVO_SIM': evo_sim}
 
-# Define the prior and simulator
+# Define the prior and simulator (sbi workflow)
 sim = str(args.model)
 stop_after_epochs = int(args.epochs)
 prior = get_prior(sim)
 simulator = model_dict[sim]
 num_sim = int(args.num_sim)
 
+
+### SBI "by the book" ###
 # inference
 # Check prior, return PyTorch prior.
 prior, num_parameters, prior_returns_numpy = process_prior(prior)

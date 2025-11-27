@@ -1,3 +1,6 @@
+### Evolutionary simulator for benchmarking ###
+# This file includes the simulator function for a 3-locus evolutionary model.
+
 import numpy as np
 from dataclasses import dataclass
 from typing import Tuple, Dict, List
@@ -123,13 +126,15 @@ def simulate_three_mutations(cfg: SimConfig) -> Dict[str, np.ndarray]:
 
 def simulate_three_mutations_vec30(cfg: SimConfig) -> np.ndarray:
     out = simulate_three_mutations(cfg)
-    # take generations 100..1000 (skip gen 0), that’s 10 points
-    f1 = out["p_mut1"][1:]  # shape (10,)
-    f2 = out["p_mut2"][1:]  # shape (10,)
-    f3 = out["p_mut3"][1:]  # shape (10,)
-    vec30 = np.concatenate([f1, f2, f3], axis=0).astype(np.float64)  # shape (30,)
+    # skip first
+    f1 = out["p_mut1"][1:]  
+    f2 = out["p_mut2"][1:]  
+    f3 = out["p_mut3"][1:]  
+    vec30 = np.concatenate([f1, f2, f3], axis=0).astype(np.float64)  # shape (3G,)
     return vec30
 
+
+# simulator configured for sbi
 def evo_sim(theta):
     s1, s2, s3, u1, u2, u3 = 10**theta
     cfg = SimConfig(
@@ -152,12 +157,13 @@ def EVO_SIM_wrapper(reps, parameters, seed=None):
     return evo_reps
 
 
+# Plotting function
 def plot_vec30(
     vec30: np.ndarray,
     sample_every: int = 100,
     gens: int = 1000,
-    order: str = "blocked",  # "blocked" = [10 for mut1][10 for mut2][10 for mut3]
-                              # "interleaved" = [mut1_t100,mut2_t100,mut3_t100, mut1_t200,...]
+    order: str = "blocked",  # "blocked" = [G for mut1][G for mut2][G for mut3]
+                              # "interleaved" = [mut1_t1,mut2_t1,mut3_t1, mut1_t2,...]
     labels = ("Mutation 1", "Mutation 2", "Mutation 3"),
     title: str = "Three mutations (allele frequencies)",
     ax = None

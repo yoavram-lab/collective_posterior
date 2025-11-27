@@ -1,6 +1,6 @@
 # collective_posterior
 
-Repository of the paper: "Collective Posterior Distribution for Simulation-Based Inference from Multiple Experimental Replicates"
+Repository of the paper: "Inferring a Collective Posterior Distribution from Highly Variable Experimental Replicates"
 
 The collective posterior is an abstract extension to simulation-based inference to allow inference from multiple observation with any density estimator for indiviudal posterior distribution estimation.
 
@@ -12,9 +12,9 @@ To reproduce the paper's benchmark results, you need to install sbibm and sbi, b
 ```pip install sbi==0.23.1```
 ```pip install torch==1.13.1```
 
-To reproduce the WF results, you don't need to install sbibm. Simply install sbi and torch and run tests/inference.
+To reproduce the WF (Chuong et al., 2025) or EVO_SIM (3-locus benchmark) results, you don't need to install sbibm. Simply install sbi and torch and run tests/inference.
 
-For WF, GLU, and SLCP:
+Each simulator has its own folder:
 - The notebook test_collective.ipynb includes the assessment figures and an example of inference from synthetic data.
 
 For WF:
@@ -28,7 +28,6 @@ Additionally:
 - The notebook phylo_abc.ipynb demonstrates inference with ABC and the collective posterior on a phylogenetic dataset.
 
 Inference files:
-- inference.py - NPE
-- inference_ensemble.py - ensemble NPE
+- inference.py - NPE (individual obs)
 - inference_sbi_iid.py - NPE+PIE
 - inference_utils.py - priors

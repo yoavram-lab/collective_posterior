@@ -2,8 +2,6 @@ import torch
 from sbi.utils import BoxUniform
 import sbibm
 
-# Define the prior
-# Define the prior
 def get_prior(sim):
     if sim == 'WF':
         prior = BoxUniform(low=torch.tensor([-2, -7, -8]), high=torch.tensor([0, -2, -2]))
