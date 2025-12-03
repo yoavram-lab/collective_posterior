@@ -246,3 +246,153 @@ class CollectivePosterior:
 
         return self.log_C
 
+
+    def estimate_epsilon(self, x, prior=None, posterior=None, T=100, quant=0.95, n_reps=10):
+        """
+        Estimate epsilon value for the collective posterior distribution
+        By taking the 95th percentile of the log probabilities of random prior samples.
+        Requires:
+        x - list of observations (to be simulated separately).
+        posterior - amortized posterior.
+        """
+        if prior is None:
+            prior = self.prior
+        if posterior is None:
+            posterior = self.amortized_posterior
+        S = len(x)
+        total_lp = 0
+        for i in range(n_reps):
+            lp_random = torch.empty(S, T)
+            for i in range(S):
+                lp_random[i] = posterior.set_default_x(x[i]).log_prob(prior.sample((T,)))
+            G = lp_random.max().item() 
+            total_lp += lp_random.quantile(quant)
+        return total_lp / n_reps
+
+
+### ARCHIVE ###
+
+    # def sample_one(self, jump=int(1e5), keep=False):
+    #     """
+    #     Draw a single sample from the posterior.
+
+    #     Parameters:
+    #         jump (int): Number of prior samples to draw in each batch. Default is 1e4.
+    #         keep (bool): Whether to store the sample in the object. Default is True.
+        
+    #     Returns:
+    #         torch.Tensor: A single sample from the posterior.
+    #     """
+    #     sampled=False
+    #     while not(sampled):
+    #         samps = self.prior.sample((jump,))
+    #         probs = torch.rand(samps.size()[0])
+    #         lp = self.log_prob(samps)
+    #         next_idx = lp > probs
+    #         if next_idx.sum()>0:
+    #             sampled=True
+    #     return samps[next_idx][0]
+    
+    # def sample_around(self, theta, jump=int(1e4)):
+    #     """
+    #     Sample around a given point using a Gaussian proposal.
+
+    #     Parameters:
+    #         theta (torch.Tensor): Center of the Gaussian proposal.
+    #         jump (int): Number of candidates to sample. Default is 1e4.
+        
+    #     Returns:
+    #         tuple: (Accepted samples, new center theta).
+    #     """
+    #     dist =  torch.distributions.multivariate_normal.MultivariateNormal(theta, torch.diag(torch.tensor([self.sample_var]*self.theta_dim)))
+    #     cands = dist.sample((jump,))
+    #     probs = self.log_prob(cands)
+    #     baseline = torch.rand((len(cands),))
+    #     res = cands[probs>baseline]
+    #     new_theta = cands[probs.argmax()]
+    #     return res, new_theta
+    
+#     def sample_unimodal(self, n_samples, jump=int(1e5), keep=True):
+#         """
+#         Sample from the posterior using iterative proposals.
+
+#         Parameters:
+#             n_samples (int): Number of samples to generate.
+#             jump (int): Number of candidates to sample at each iteration. Default is 1e4.
+#             keep (bool): Whether to store the samples in the object. Default is True.
+        
+#         Returns:
+#             torch.Tensor: Samples from the posterior.
+#         """
+#         theta = self.sample_one(jump, keep=False)
+#         samples = torch.empty((n_samples, len(theta)))
+#         cur = 0
+
+#         with tqdm(total=n_samples, desc="Sampling") as pbar:
+#             while cur < n_samples:
+#                 samps, theta = self.sample_around(theta, jump)
+#                 how_many = len(samps)
+#                 if cur + how_many > n_samples:
+#                     how_many = n_samples - cur
+#                 if how_many > 0:
+#                     samples[cur:cur + how_many, :] = samps[:how_many, :]
+#                     cur += how_many
+#                     pbar.update(how_many)  # Update the progress bar
+
+#         if keep:
+#             self.samples = samples
+
+#         return samples
+
+
+
+    # def sample_multimodal(
+    #     self,
+    #     n_samples: int,                     # number of starting centres
+    #     jump: int = 100_000,
+    #     keep: bool = True,
+    #     k: int = 10,
+    #     T: float = 10.0                     # exploration threshold parameter
+    # ):
+    #     """
+    #     Draw `n_samples` points by running `k` independent short explorations.
+    #     Threshold of exploration is log_prob of current centre - T.
+
+    #     If self.samples is not empty, use those as centres.
+    #     Each sub-run starts from a different seed drawn with `sample_one`.
+
+    #     NOTE: correctness hinges on `sample_one` / `sample_around`
+    #     being proper rejection samplers (see §2 below).
+    #     """
+    #     assert k >= 1, "k must be at least 1"
+    #     per_chain = math.ceil(n_samples / k)      # sub-samples per centre
+    #     all_chunks = []
+    #     if len(self.samples) > 0:
+    #         init_thetas = self.samples[torch.randint(0, len(self.samples), (k,))]
+    #     else:
+    #         init_thetas = self.rejection_sample(k, jump, keep)
+    #     with tqdm(total=n_samples, desc="Sampling") as bar:
+    #         for j in range(k):
+    #             # 1) independent seed
+    #             theta = init_thetas[j]
+    #             chunk = torch.empty((per_chain, self.theta_dim))
+    #             cur = 0
+    #             # Set threshold for exploration
+    #             threshold = self.log_prob(theta) - T
+    #             while cur < per_chain:
+    #                 samps, new_theta = self.sample_around(theta, jump)
+    #                 # Only keep samples above the threshold
+    #                 mask = self.log_prob(samps) > threshold
+    #                 filtered_samps = samps[mask]
+    #                 take = min(per_chain - cur, filtered_samps.size(0))
+    #                 if take:
+    #                     chunk[cur : cur + take] = filtered_samps[:take]
+    #                     cur += take
+    #                     bar.update(take)
+    #                 theta = new_theta
+    #             all_chunks.append(chunk)
+    #     samples = torch.cat(all_chunks, dim=0)[:n_samples]   # exact count
+    #     if keep:
+    #         self.samples = samples
+    #     return samples
+
