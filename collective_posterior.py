@@ -273,122 +273,6 @@ class CollectivePosterior:
         return total_lp / n_reps
 
 
-    def sample_via_importance(self, n_draws=100_000, n_final=10_000, proposal='prior', 
-                              temperature=None, excess_quantile=0.3):
-        """
-        Fast sampling using SIR with 'Oversample & Prune' strategy.
-        
-        Args:
-            excess_quantile (float): Fraction of extra samples to draw and then discard.
-                                     e.g., 0.05 means sample 105% of n_final, then drop the worst 5%.
-        """
-        n_reps = len(self.Xs)
-        temperature = temperature if temperature is not None else self.temp
-        
-        # --- 1. SAMPLE FROM PROPOSAL ---
-        if proposal == 'prior':
-            theta_pool = self.prior.sample((n_draws,))
-            log_proposal = self.prior.log_prob(theta_pool)
-            
-        elif proposal == 'mixture':
-            n_per_rep = n_draws // n_reps
-            proposals_list = []
-            
-            for i in tqdm(range(n_reps), desc="Proposal Sampling"):
-                if self.amortized_posterior is not None:
-                    post_obj = self.amortized_posterior
-                    if hasattr(post_obj, 'set_default_x'):
-                        post_obj.set_default_x(self.Xs[i])
-                else:
-                    post_obj = self.posterior_list[i]
-                
-                theta_i = post_obj.sample((n_per_rep,), show_progress_bars=False)
-                proposals_list.append(theta_i)
-                
-            theta_pool = torch.cat(proposals_list, dim=0)
-            
-            # Calculate Mixture Density q(theta)
-            log_likelihoods_for_q = []
-            for i in range(n_reps):
-                if self.amortized_posterior is not None:
-                    post_obj = self.amortized_posterior
-                    if hasattr(post_obj, 'set_default_x'):
-                        post_obj.set_default_x(self.Xs[i])
-                else:
-                    post_obj = self.posterior_list[i]
-                log_likelihoods_for_q.append(post_obj.log_prob(theta_pool))
-            
-            log_L_q_matrix = torch.stack(log_likelihoods_for_q, dim=0)
-            log_proposal = torch.logsumexp(log_L_q_matrix, dim=0) - np.log(n_reps)
-
-        # --- 2. EVALUATE TARGET ---
-        log_prior = self.prior.log_prob(theta_pool)
-        
-        log_likelihoods = []
-        for i in tqdm(range(n_reps), desc="Sampling"):
-            if self.amortized_posterior is not None:
-                post_obj = self.amortized_posterior
-                if hasattr(post_obj, 'set_default_x'):
-                    post_obj.set_default_x(self.Xs[i])
-            else:
-                post_obj = self.posterior_list[i]
-
-            ll = post_obj.log_prob(theta_pool)
-            log_likelihoods.append(ll)
-            
-        log_L_matrix = torch.stack(log_likelihoods, dim=0)
-        
-        # --- 3. CALCULATE WEIGHTS ---
-        eps_tensor = torch.as_tensor(self.epsilon, device=log_L_matrix.device, dtype=log_L_matrix.dtype)
-        
-        # A. Robust Likelihood
-        log_L_robust = torch.logaddexp(log_L_matrix, eps_tensor)
-        
-        # B. Prior Correction with Inf handling
-        sum_log_lik = log_L_robust.sum(dim=0)
-        prior_term = (n_reps - 1) * log_prior
-        
-        log_target_unnorm = sum_log_lik - prior_term
-        log_target_unnorm[torch.isinf(log_prior)] = -float('inf')
-        
-        # C. Importance Weights
-        log_weights = log_target_unnorm - log_proposal
-        log_weights = torch.nan_to_num(log_weights, nan=-float('inf'))
-        
-        # --- TEMPERING ---
-        if temperature != 1.0:
-            log_weights = log_weights / temperature
-
-        # Normalize weights for resampling
-        weights = torch.softmax(log_weights, dim=0)
-        
-        # --- 4. RESAMPLING WITH OVERSAMPLING & PRUNING ---
-        if weights.sum() == 0 or torch.isnan(weights).any():
-            print("Warning: All samples rejected. Returning prior samples.")
-            final_samples = self.prior.sample((n_final,))
-            ess = 0.0
-        else:
-            ess = 1.0 / torch.sum(weights ** 2)
-            
-            # Step A: Oversample (e.g., 105% of n_final)
-            n_safe = int(n_final * (1 + excess_quantile))
-            indices = torch.multinomial(weights, n_safe, replacement=True)
-            
-            # Step B: Retrieve the original unnormalized weights of the SELECTED samples
-            # We want to drop the ones that had the worst weights, even if they got lucky and were picked
-            selected_log_w = log_weights[indices]
-            
-            # Step C: Keep only the top n_final samples
-            # torch.topk works largest->smallest
-            best_indices_local = torch.topk(selected_log_w, n_final).indices
-            
-            # Map back to pool indices
-            final_indices = indices[best_indices_local]
-            final_samples = theta_pool[final_indices]
-        
-        self.samples = final_samples
-        return final_samples, weights, ess.item()
-    
 
     
     def sample_via_sir_jitter(self, n_draws=100_000, n_final=10_000, bandwidth_scale=0.5, temperature=None, excess_quantile=0.5):
@@ -416,7 +300,7 @@ class CollectivePosterior:
             if self.amortized_posterior is not None:
                 if hasattr(self.amortized_posterior, 'set_default_x'):
                     self.amortized_posterior.set_default_x(self.Xs[i])
-                ll = self.amortized_posterior.log_prob(theta_pool)
+                ll = self.amortized_posterior.log_prob(theta_pool, norm_posterior=False)
             else:
                 ll = self.posterior_list[i].log_prob(theta_pool)
             log_liks.append(ll)
@@ -451,7 +335,7 @@ class CollectivePosterior:
         # Retrieve the original unnormalized weights of the CHOSEN samples
         selected_log_w = log_weights[indices]
         
-        # Keep only the top n_final samples (discard the worst 5%)
+        # Keep only the top n_final samples (discard the worst %)
         # torch.topk works largest->smallest
         best_indices_local = torch.topk(selected_log_w, n_final).indices
         
@@ -627,3 +511,119 @@ class CollectivePosterior:
     #         self.samples = samples
     #     return samples
 
+    # def sample_via_importance(self, n_draws=100_000, n_final=10_000, proposal='prior', 
+    #                           temperature=None, excess_quantile=0.3):
+    #     """
+    #     Fast sampling using SIR with 'Oversample & Prune' strategy.
+        
+    #     Args:
+    #         excess_quantile (float): Fraction of extra samples to draw and then discard.
+    #                                  e.g., 0.05 means sample 105% of n_final, then drop the worst 5%.
+    #     """
+    #     n_reps = len(self.Xs)
+    #     temperature = temperature if temperature is not None else self.temp
+        
+    #     # --- 1. SAMPLE FROM PROPOSAL ---
+    #     if proposal == 'prior':
+    #         theta_pool = self.prior.sample((n_draws,))
+    #         log_proposal = self.prior.log_prob(theta_pool)
+            
+    #     elif proposal == 'mixture':
+    #         n_per_rep = n_draws // n_reps
+    #         proposals_list = []
+            
+    #         for i in tqdm(range(n_reps), desc="Proposal Sampling"):
+    #             if self.amortized_posterior is not None:
+    #                 post_obj = self.amortized_posterior
+    #                 if hasattr(post_obj, 'set_default_x'):
+    #                     post_obj.set_default_x(self.Xs[i])
+    #             else:
+    #                 post_obj = self.posterior_list[i]
+                
+    #             theta_i = post_obj.sample((n_per_rep,), show_progress_bars=False)
+    #             proposals_list.append(theta_i)
+                
+    #         theta_pool = torch.cat(proposals_list, dim=0)
+            
+    #         # Calculate Mixture Density q(theta)
+    #         log_likelihoods_for_q = []
+    #         for i in range(n_reps):
+    #             if self.amortized_posterior is not None:
+    #                 post_obj = self.amortized_posterior
+    #                 if hasattr(post_obj, 'set_default_x'):
+    #                     post_obj.set_default_x(self.Xs[i])
+    #             else:
+    #                 post_obj = self.posterior_list[i]
+    #             log_likelihoods_for_q.append(post_obj.log_prob(theta_pool))
+            
+    #         log_L_q_matrix = torch.stack(log_likelihoods_for_q, dim=0)
+    #         log_proposal = torch.logsumexp(log_L_q_matrix, dim=0) - np.log(n_reps)
+
+    #     # --- 2. EVALUATE TARGET ---
+    #     log_prior = self.prior.log_prob(theta_pool)
+        
+    #     log_likelihoods = []
+    #     for i in tqdm(range(n_reps), desc="Sampling"):
+    #         if self.amortized_posterior is not None:
+    #             post_obj = self.amortized_posterior
+    #             if hasattr(post_obj, 'set_default_x'):
+    #                 post_obj.set_default_x(self.Xs[i])
+    #         else:
+    #             post_obj = self.posterior_list[i]
+
+    #         ll = post_obj.log_prob(theta_pool)
+    #         log_likelihoods.append(ll)
+            
+    #     log_L_matrix = torch.stack(log_likelihoods, dim=0)
+        
+    #     # --- 3. CALCULATE WEIGHTS ---
+    #     eps_tensor = torch.as_tensor(self.epsilon, device=log_L_matrix.device, dtype=log_L_matrix.dtype)
+        
+    #     # A. Robust Likelihood
+    #     log_L_robust = torch.logaddexp(log_L_matrix, eps_tensor)
+        
+    #     # B. Prior Correction with Inf handling
+    #     sum_log_lik = log_L_robust.sum(dim=0)
+    #     prior_term = (n_reps - 1) * log_prior
+        
+    #     log_target_unnorm = sum_log_lik - prior_term
+    #     log_target_unnorm[torch.isinf(log_prior)] = -float('inf')
+        
+    #     # C. Importance Weights
+    #     log_weights = log_target_unnorm - log_proposal
+    #     log_weights = torch.nan_to_num(log_weights, nan=-float('inf'))
+        
+    #     # --- TEMPERING ---
+    #     if temperature != 1.0:
+    #         log_weights = log_weights / temperature
+
+    #     # Normalize weights for resampling
+    #     weights = torch.softmax(log_weights, dim=0)
+        
+    #     # --- 4. RESAMPLING WITH OVERSAMPLING & PRUNING ---
+    #     if weights.sum() == 0 or torch.isnan(weights).any():
+    #         print("Warning: All samples rejected. Returning prior samples.")
+    #         final_samples = self.prior.sample((n_final,))
+    #         ess = 0.0
+    #     else:
+    #         ess = 1.0 / torch.sum(weights ** 2)
+            
+    #         # Step A: Oversample (e.g., 105% of n_final)
+    #         n_safe = int(n_final * (1 + excess_quantile))
+    #         indices = torch.multinomial(weights, n_safe, replacement=True)
+            
+    #         # Step B: Retrieve the original unnormalized weights of the SELECTED samples
+    #         # We want to drop the ones that had the worst weights, even if they got lucky and were picked
+    #         selected_log_w = log_weights[indices]
+            
+    #         # Step C: Keep only the top n_final samples
+    #         # torch.topk works largest->smallest
+    #         best_indices_local = torch.topk(selected_log_w, n_final).indices
+            
+    #         # Map back to pool indices
+    #         final_indices = indices[best_indices_local]
+    #         final_samples = theta_pool[final_indices]
+        
+    #     self.samples = final_samples
+    #     return final_samples, weights, ess.item()
+    
