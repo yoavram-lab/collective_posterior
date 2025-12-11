@@ -7,8 +7,9 @@ import argparse
 from collective_posterior import CollectivePosterior
 from inference_utils import get_prior
 
+import time
 
-torch.set_num_threads(80)
+torch.set_num_threads(48)
 
 # torch no grad
 torch.set_grad_enabled(False)
@@ -37,6 +38,8 @@ posterior_dir = args.posterior
 samples = int(args.samples)
 c = args.cp
 h = x_dir[-4] == 'h'
+n = x_dir[-4] == 'n'
+r = x_dir[-4] == 'r'
 ending = args.ending
 
 # Load the posterior with pickle
@@ -62,12 +65,7 @@ def coverage_old(posterior, samples, conf_levels, theta):
 
 # main function - evaluating the estimator
 def evaluate(posterior, thetas, n_samples, cp = False):
-    if sim == 'WF':
-        epsilon = -150
-    if sim == 'EVO_SIM':
-        epsilon = -10
-    else:
-        epsilon = -10000
+    epsilon = -10 if sim != 'GLU' else -10000
     accus = torch.empty(thetas.shape)
     covs = torch.empty(len(thetas[:,0]),len(conf_levels), len(thetas[0]))
     all_samples = torch.empty(len(thetas), n_samples, len(thetas[0]))
@@ -76,8 +74,7 @@ def evaluate(posterior, thetas, n_samples, cp = False):
         x = X[i]
         if cp:
             cp = CollectivePosterior(prior, amortized_posterior=posterior, log_C=1, Xs=x, epsilon=epsilon)
-            cp.get_log_C()
-            samples = cp.sample(n_samples)
+            samples = cp.sample_via_sir_jitter(n_final=n_samples)
         else:
             samples = posterior.set_default_x(x).sample((n_samples,))
         all_samples[i,:,:] = samples
@@ -89,6 +86,7 @@ def evaluate(posterior, thetas, n_samples, cp = False):
     return accus, covs, all_samples
 
 
+start_time = time.time()
 
 accus, covs, all_samples = evaluate(posterior, thetas, n_samples=samples, cp=c)
 
@@ -97,7 +95,16 @@ accus, covs, all_samples = evaluate(posterior, thetas, n_samples=samples, cp=c)
 
 add_iid = '' if c else '_iid'
 add_h = '_h' if h else ''
+add_n = '_n' if n else ''
+add_r = '_r' if r else ''
 
-torch.save(accus, f'{sim}/accus_{sim}{add_iid}{add_h}{ending}.pt')
-torch.save(covs, f'{sim}/covs_{sim}{add_iid}{add_h}{ending}.pt')
-torch.save(all_samples, f'{sim}/samples_{sim}{add_iid}{add_h}{ending}.pt')
+torch.save(accus, f'{sim}/accus_{sim}{add_iid}{add_h}{add_n}{add_r}{ending}.pt')
+torch.save(covs, f'{sim}/covs_{sim}{add_iid}{add_h}{add_n}{add_r}{ending}.pt')
+torch.save(all_samples, f'{sim}/samples_{sim}{add_iid}{add_h}{add_n}{add_r}{ending}.pt')
+
+
+end_time = time.time()
+elapsed = end_time - start_time
+print(f"\n{'='*60}")
+print(f"Total execution time: {elapsed:.2f} seconds ({elapsed/60:.2f} minutes)")
+print(f"{'='*60}")

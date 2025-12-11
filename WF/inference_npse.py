@@ -19,6 +19,9 @@ from sbi.utils.user_input_checks import (
     process_simulator,
 )
 
+sys.path.insert(1, '../')
+from collective_posterior import CollectivePosterior
+
 N = 1e7
 generation = pd.read_csv('empirical_data/Chuong_116_gens.txt').columns.astype('int')
 
@@ -130,7 +133,7 @@ simulator = process_simulator(WF, prior, prior_returns_numpy)
 # Consistency check after making ready for sbi.
 check_sbi_inputs(simulator, prior)
 
-num_sims = 30_000
+num_sims = 3_000
 
 theta = prior.sample((num_sims,))
 x = simulator(theta)
@@ -153,7 +156,7 @@ for k in range(len(lines)):
     samples_npse = posterior_npse.set_default_x(X).sample((100,))
     torch.save(samples_npse, f'samples_npse_{line}_noisy.pt')
 
-    
+
 thetas = torch.tensor(pd.read_csv('tests/test_thetas.csv', index_col=0).values.astype('float'), dtype=torch.float32)
 
 
