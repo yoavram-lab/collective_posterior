@@ -1,4 +1,5 @@
 # Test the collective posterior estimators
+import math
 from simulators import WF, GLU, SLCP
 from evo_sim import evo_sim
 import torch
@@ -40,6 +41,7 @@ c = args.cp
 h = x_dir[-4] == 'h'
 n = x_dir[-4] == 'n'
 r = x_dir[-4] == 'r'
+e = x_dir[-4] == 'e'
 ending = args.ending
 
 # Load the posterior with pickle
@@ -74,7 +76,7 @@ def evaluate(posterior, thetas, n_samples, cp = False):
         x = X[i]
         if cp:
             cp = CollectivePosterior(prior, amortized_posterior=posterior, log_C=1, Xs=x, epsilon=epsilon)
-            samples = cp.sample_via_sir_jitter(n_final=n_samples)
+            samples = cp.sample_via_sir_jitter(n_draws=150_000, n_final=n_samples, excess_quantile=0)
         else:
             samples = posterior.set_default_x(x).sample((n_samples,))
         all_samples[i,:,:] = samples
@@ -97,10 +99,11 @@ add_iid = '' if c else '_iid'
 add_h = '_h' if h else ''
 add_n = '_n' if n else ''
 add_r = '_r' if r else ''
+add_e = '_e' if e else ''
 
-torch.save(accus, f'{sim}/accus_{sim}{add_iid}{add_h}{add_n}{add_r}{ending}.pt')
-torch.save(covs, f'{sim}/covs_{sim}{add_iid}{add_h}{add_n}{add_r}{ending}.pt')
-torch.save(all_samples, f'{sim}/samples_{sim}{add_iid}{add_h}{add_n}{add_r}{ending}.pt')
+torch.save(accus, f'{sim}/accus_{sim}{add_iid}{add_h}{add_n}{add_r}{add_e}{ending}.pt')
+torch.save(covs, f'{sim}/covs_{sim}{add_iid}{add_h}{add_n}{add_r}{add_e}{ending}.pt')
+torch.save(all_samples, f'{sim}/samples_{sim}{add_iid}{add_h}{add_n}{add_r}{add_e}{ending}.pt')
 
 
 end_time = time.time()

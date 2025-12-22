@@ -183,11 +183,15 @@ def plot_vec30(
     else:
         raise ValueError('order must be "blocked" or "interleaved"')
 
-    ax.plot(times, f1, label=labels[0], color='red')
-    ax.plot(times, f2, label=labels[1], color='blue', ls='--')
-    ax.plot(times, f3, label=labels[2], color='green', ls=':')
+    ax.scatter(times, f1, label=labels[0], color='red', marker='o', lw=0.1, s=200)
+    ax.scatter(times, f2, label=labels[1], color='blue', marker='s', lw=0.1, s=200)
+    ax.scatter(times, f3, label=labels[2], color='green', marker='^', lw=0.1, s=200)
+
+    ax.plot(times, f1, label=labels[0], color='red', lw=0.5)
+    ax.plot(times, f2, label=labels[1], color='blue', ls='--', lw=0.5)
+    ax.plot(times, f3, label=labels[2], color='green', ls=':', lw=0.5)
     ax.set_xlabel("Generation")
     ax.set_ylabel("Allele frequency")
-    ax.set_title(title)
+    ax.set_title(title, loc="left")
     plt.tight_layout()
 

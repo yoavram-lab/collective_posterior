@@ -43,8 +43,7 @@ class CollectivePosterior:
         self.sample_var = sample_var
         self.posterior_list = posterior_list
         
-        inc = self.epsilon >= -10
-        self.temp = math.sqrt(len(self.Xs))*(1+0.5*inc)
+        self.temp = math.sqrt(len(self.Xs))
 
         # Ensure inference is possible
         assert (len(posterior_list) > 0 or amortized_posterior is not None)
@@ -275,7 +274,7 @@ class CollectivePosterior:
 
 
     
-    def sample_via_sir_jitter(self, n_draws=100_000, n_final=10_000, bandwidth_scale=0.5, temperature=None, excess_quantile=0.5):
+    def sample_via_sir_jitter(self, n_draws=100_000, n_final=10_000, bandwidth_scale=1, temperature=None, excess_quantile=0.5):
         """
         Gradient-free sampler: SIR with Oversampling/Pruning and Gaussian Jitter.
         
@@ -383,9 +382,11 @@ class CollectivePosterior:
             smoothed_samples = torch.clamp(smoothed_samples, low, high)
             
         self.samples = smoothed_samples
+        ess = 1.0 / torch.sum(weights ** 2)
+        print(f"Sampled {n_final} points with jitter and reflection. ESS = {ess}")
         return smoothed_samples
 
-### ARCHIVE ###
+    ### ARCHIVE ###
 
     # def sample_one(self, jump=int(1e5), keep=False):
     #     """
@@ -626,4 +627,5 @@ class CollectivePosterior:
         
     #     self.samples = final_samples
     #     return final_samples, weights, ess.item()
+    
     

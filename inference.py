@@ -63,7 +63,7 @@ density_estimator = inference.append_simulations(theta, x).train(stop_after_epoc
 posterior = inference.build_posterior(density_estimator)
 
 # Save the posterior with pickle
-with open(f'{sim}/posterior_{sim}_{num_sim}_{stop_after_epochs}.pkl', 'wb') as f:
+with open(f'{sim}/posterior_{sim}_{num_sim}_{stop_after_epochs}_.pkl', 'wb') as f:
     pickle.dump(posterior, f)
 
 # time
