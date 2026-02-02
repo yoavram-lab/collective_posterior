@@ -1,6 +1,6 @@
 # collective_posterior
 
-Repository of the paper: "Inferring a Collective Posterior Distribution from Highly Variable Experimental Replicates"
+Repository of the paper: "Collective Posterior Inference from Highly Variable Empirical Replicates"
 
 The collective posterior is an abstract extension to simulation-based inference to allow inference from multiple observation with any density estimator for indiviudal posterior distribution estimation.
 
