@@ -267,9 +267,8 @@ class CollectivePosterior:
             lp_random = torch.empty(S, T)
             for i in range(S):
                 lp_random[i] = posterior.set_default_x(x[i]).log_prob(prior.sample((T,)), norm_posterior=False)
-            G = lp_random.max().item() 
             total_lp += lp_random.quantile(quant)
-        return total_lp / n_reps
+        return total_lp / n_reps, lp_random
 
 
 
