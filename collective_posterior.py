@@ -25,7 +25,7 @@ class CollectivePosterior:
         epsilon: Sensitivity parameter, used as a lower bound for posterior probabilities. Default is -10000. Can be estimated as described in paper. 
         n_eval: Number of samples used for Monte Carlo estimation. Default is 1e5.
         sample_var: Variance for MCMC-like sampling. Default is 0.05.
-        posterior_list: In case of using non-amortized posteriors, a list of log_prob functions can be used instead.
+        posterior_list: In case of using non-amortized posteriors, a list of distributions can be used instead.
     """
        
 
@@ -42,6 +42,8 @@ class CollectivePosterior:
         self.n_eval = n_eval
         self.sample_var = sample_var
         self.posterior_list = posterior_list
+        self.last_adaptive_sir_diagnostics = None
+        self.last_adaptive_sir_log_weights = None
         
         self.temp = math.sqrt(len(self.Xs))
 
@@ -71,7 +73,7 @@ class CollectivePosterior:
             if len(self.posterior_list) == 0:  # amortized posterior
                 lp_i = self.amortized_posterior.set_default_x(self.Xs[i, :]).log_prob(theta, norm_posterior=False)
             else:  # provided per-replicate log-probs
-                lp_i = self.posterior_list[i](theta)  # expects (N,) or (N,1)
+                lp_i = self.posterior_list[i].log_prob(theta)  # expects (N,) or (N,1)
             log_probs[:, i] = torch.clamp(lp_i.reshape(N,), min=self.epsilon)  # epsilon is a LOG floor
 
         sum_logp = log_probs.sum(dim=1)                           # (N,)
@@ -85,6 +87,8 @@ class CollectivePosterior:
             return self.mcmc_from_top_sn(n_total=n_samples, step_size=step_size, take_sn=take_sn)
         elif method == 'rejection':
             return self.rejection_sample(n_samples, jump=jump, m=m, keep=keep, n_workers=num_workers)
+        elif method == 'adaptive_sir':
+            return self.adaptive_sir(n_final=n_samples, keep=keep)
         else:
             raise ValueError(f"Unknown sampling method: {method}")
 
@@ -225,7 +229,7 @@ class CollectivePosterior:
                 if len(self.posterior_list) == 0:
                     lp_i = self.amortized_posterior.set_default_x(self.Xs[i, :]).log_prob(theta, norm_posterior=False)
                 else:
-                    lp_i = self.posterior_list[i](theta)
+                    lp_i = self.posterior_list[i].log_prob(theta)
                 log_probs[:, i] = torch.clamp(lp_i.reshape(N,), min=self.epsilon)  # LOG floor
 
             sum_logp = log_probs.sum(dim=1)                       # (N,)
@@ -261,14 +265,245 @@ class CollectivePosterior:
             prior = self.prior
         if posterior is None:
             posterior = self.amortized_posterior
+        else:
+            posterior = self.posterior_list
         S = len(x)
         total_lp = 0
         for i in range(n_reps):
             lp_random = torch.empty(S, T)
             for i in range(S):
-                lp_random[i] = posterior.set_default_x(x[i]).log_prob(prior.sample((T,)), norm_posterior=False)
+                if hasattr(posterior, "set_default_x"):
+                    lp_random[i] = posterior.set_default_x(x[i]).log_prob(prior.sample((T,)), norm_posterior=False)
+                else:
+                    lp_random[i] = posterior[i].log_prob(prior.sample((T,)))
             total_lp += lp_random.quantile(quant)
         return total_lp / n_reps, lp_random
+
+    def _collective_log_target(self, theta_pool, show_progress=False, progress_desc="Evaluating samples"):
+        n_reps = len(self.Xs)
+        log_liks = []
+        iterator = range(n_reps)
+        if show_progress:
+            iterator = tqdm(iterator, desc=progress_desc)
+        for i in iterator:
+            if self.amortized_posterior is not None:
+                if hasattr(self.amortized_posterior, "set_default_x"):
+                    self.amortized_posterior.set_default_x(self.Xs[i])
+                ll = self.amortized_posterior.log_prob(theta_pool, norm_posterior=False)
+            else:
+                ll = self.posterior_list[i].log_prob(theta_pool)
+            log_liks.append(ll)
+
+        log_lik_matrix = torch.stack(log_liks, dim=0)
+        eps_tensor = torch.as_tensor(self.epsilon, device=log_lik_matrix.device, dtype=log_lik_matrix.dtype)
+        log_lik_robust = torch.logaddexp(log_lik_matrix, eps_tensor)
+        return log_lik_robust.sum(dim=0) - (n_reps - 1) * self.prior.log_prob(theta_pool)
+
+    @staticmethod
+    def _ess_and_weights(log_weights):
+        weights = torch.softmax(log_weights, dim=0)
+        ess = 1.0 / torch.sum(weights ** 2)
+        return float(ess), weights
+
+    @classmethod
+    def _choose_temperature(cls, log_weights, ess_min_frac=1e-3, max_temp=256.0, n_steps=25):
+        target_ess = ess_min_frac * len(log_weights)
+        ess_raw, _ = cls._ess_and_weights(log_weights)
+        if ess_raw >= target_ess:
+            return 1.0
+
+        low, high = 1.0, max_temp
+        ess_high, _ = cls._ess_and_weights(log_weights / high)
+        while ess_high < target_ess and high < 1e6:
+            high *= 2.0
+            ess_high, _ = cls._ess_and_weights(log_weights / high)
+
+        for _ in range(n_steps):
+            mid = 0.5 * (low + high)
+            ess_mid, _ = cls._ess_and_weights(log_weights / mid)
+            if ess_mid < target_ess:
+                low = mid
+            else:
+                high = mid
+        return high
+
+    @staticmethod
+    def _stratified_resample(weights, n_samples):
+        positions = (torch.arange(n_samples, dtype=weights.dtype, device=weights.device) + torch.rand(1, device=weights.device)) / n_samples
+        cumulative = torch.cumsum(weights, dim=0)
+        indices = torch.searchsorted(cumulative, positions)
+        return torch.clamp(indices, max=len(weights) - 1)
+
+    @staticmethod
+    def _get_box_bounds(prior):
+        if hasattr(prior, "base_dist") and hasattr(prior.base_dist, "low"):
+            return prior.base_dist.low, prior.base_dist.high
+        if hasattr(prior, "low") and hasattr(prior, "high"):
+            return prior.low, prior.high
+        try:
+            return prior.support.base_constraint.lower_bound, prior.support.base_constraint.upper_bound
+        except Exception:
+            return None, None
+
+    @staticmethod
+    def _reflect_to_bounds(samples, low, high):
+        if low is None or high is None:
+            return samples
+        reflected = samples.clone()
+        reflected = torch.where(reflected < low, 2 * low - reflected, reflected)
+        reflected = torch.where(reflected > high, 2 * high - reflected, reflected)
+        reflected = torch.maximum(torch.minimum(reflected, high), low)
+        return reflected
+
+    def adaptive_sir(self, n_draws=100_000, n_final=10_000, ess_min_frac=1e-3, oversample=1.0,
+                     jitter_scale=0.15, keep=True, max_temp=256.0, n_temp_steps=25, max_attempts=3):
+        """
+        Adaptive SIR with automatic temperature selection, stratified resampling,
+        Gaussian jitter, and re-ranking under the untempered collective target.
+
+        Args:
+            n_draws (int): Size of the initial proposal pool drawn from the prior.
+            n_final (int): Number of final posterior samples desired.
+            ess_min_frac (float): Minimum ESS target as a fraction of n_draws.
+            oversample (float): Refinement-pool multiplier before pruning to n_final.
+            jitter_scale (float): Scale of Gaussian refinement jitter.
+            keep (bool): Whether to store the resulting samples in self.samples.
+            max_temp (float): Maximum temperature considered during ESS matching.
+            n_temp_steps (int): Number of binary-search steps for temperature selection.
+            max_attempts (int): Maximum number of full redraw/retry attempts if ESS stays below target.
+
+        Returns:
+            torch.Tensor: Samples of shape (n_final, theta_dim).
+        """
+        raw_target_ess = float(ess_min_frac * n_draws)
+        target_ess = float(min(raw_target_ess, n_final))
+        effective_ess_min_frac = target_ess / float(n_draws)
+        n_proposals = max(int(math.ceil(oversample * n_final)), n_final)
+        low, high = self._get_box_bounds(self.prior)
+        last_samples = None
+        last_diagnostics = None
+        self.last_adaptive_sir_log_weights = None
+
+        for attempt in range(1, max_attempts + 1):
+            theta_pool = self.prior.sample((n_draws,))
+            log_target = self._collective_log_target(
+                theta_pool,
+                show_progress=True,
+                progress_desc=f"Adaptive SIR attempt {attempt}/{max_attempts}: evaluating {n_draws} samples",
+            )
+            log_weights = log_target - self.prior.log_prob(theta_pool)
+            log_weights = torch.nan_to_num(log_weights, nan=-float("inf"))
+
+            temperature = self._choose_temperature(
+                log_weights,
+                ess_min_frac=effective_ess_min_frac,
+                max_temp=max_temp,
+                n_steps=n_temp_steps,
+            )
+            tempered_ess, weights = self._ess_and_weights(log_weights / temperature)
+
+            if weights.sum() == 0 or torch.isnan(weights).any():
+                print(f"Warning: Adaptive SIR attempt {attempt}/{max_attempts} weights collapsed.")
+                last_samples = self.prior.sample((n_final,))
+                last_diagnostics = {
+                    "attempt": int(attempt),
+                    "attempts_used": int(attempt),
+                    "temperature": float(temperature),
+                    "ess": float("nan"),
+                    "raw_target_ess": float(raw_target_ess),
+                    "target_ess": float(target_ess),
+                    "proposal_pool": int(n_draws),
+                    "refinement_pool": int(n_final),
+                    "jitter_scale": float(jitter_scale),
+                    "reached_target": False,
+                }
+                continue
+
+            if tempered_ess < target_ess:
+                print(
+                    f"Warning: Adaptive SIR attempt {attempt}/{max_attempts} reached ESS "
+                    f"{tempered_ess:.2f} below target {target_ess:.2f}. Redrawing."
+                )
+                last_diagnostics = {
+                    "attempt": int(attempt),
+                    "attempts_used": int(attempt),
+                    "temperature": float(temperature),
+                    "ess": float(tempered_ess),
+                    "raw_target_ess": float(raw_target_ess),
+                    "target_ess": float(target_ess),
+                    "proposal_pool": int(n_draws),
+                    "refinement_pool": int(n_proposals),
+                    "jitter_scale": float(jitter_scale),
+                    "reached_target": False,
+                }
+                continue
+
+            proposal_idx = self._stratified_resample(weights, n_proposals)
+            proposal_samples = theta_pool[proposal_idx]
+
+            weighted_mean = torch.sum(weights[:, None] * theta_pool, dim=0)
+            weighted_var = torch.sum(weights[:, None] * (theta_pool - weighted_mean) ** 2, dim=0)
+            proposal_scale = torch.sqrt(torch.clamp(weighted_var, min=1e-8))
+            refined_samples = proposal_samples + torch.randn_like(proposal_samples) * (jitter_scale * proposal_scale + 1e-6)
+
+            if low is not None and torch.is_tensor(low):
+                low = low.to(refined_samples.device)
+            if high is not None and torch.is_tensor(high):
+                high = high.to(refined_samples.device)
+            refined_samples = self._reflect_to_bounds(refined_samples, low, high)
+
+            refined_log_target = self._collective_log_target(
+                refined_samples,
+                show_progress=True,
+                progress_desc=f"Adaptive SIR attempt {attempt}/{max_attempts}: rescoring {n_proposals} refined samples",
+            )
+            keep_idx = torch.topk(refined_log_target, k=n_final).indices
+            final_samples = refined_samples[keep_idx]
+
+            if keep:
+                self.samples = final_samples
+            self.last_adaptive_sir_log_weights = log_weights.detach().cpu()
+            self.last_adaptive_sir_diagnostics = {
+                "attempt": int(attempt),
+                "attempts_used": int(attempt),
+                "temperature": float(temperature),
+                "ess": float(tempered_ess),
+                "raw_target_ess": float(raw_target_ess),
+                "target_ess": float(target_ess),
+                "proposal_pool": int(n_draws),
+                "refinement_pool": int(n_proposals),
+                "jitter_scale": float(jitter_scale),
+                "reached_target": True,
+            }
+            print(
+                f"Adaptive SIR attempt {attempt}/{max_attempts} drew {n_draws} proposals, "
+                f"refined {n_proposals}, returned {n_final} samples. "
+                f"Temperature = {temperature:.4f}, ESS = {tempered_ess:.2f}."
+            )
+            return final_samples
+
+        print(
+            f"Warning: Adaptive SIR did not reach target ESS {target_ess:.2f} after "
+            f"{max_attempts} attempts. Returning prior samples from the last failed attempt."
+        )
+        if last_samples is None:
+            last_samples = self.prior.sample((n_final,))
+            last_diagnostics = {
+                "attempt": int(max_attempts),
+                "attempts_used": int(max_attempts),
+                "temperature": float("nan"),
+                "ess": float("nan"),
+                "raw_target_ess": float(raw_target_ess),
+                "target_ess": float(target_ess),
+                "proposal_pool": int(n_draws),
+                "refinement_pool": int(n_final),
+                "jitter_scale": float(jitter_scale),
+                "reached_target": False,
+            }
+        if keep:
+            self.samples = last_samples
+        self.last_adaptive_sir_diagnostics = last_diagnostics
+        return last_samples
 
 
 
