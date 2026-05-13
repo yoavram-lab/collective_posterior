@@ -2,8 +2,7 @@
 # sbi 0.25 imports torch._higher_order_ops.associative_scan, which is absent in torch 1.13.
 # Use the CPU torch wheel to avoid CUDA/cuDNN runtime mismatches in notebook kernels.
 --extra-index-url https://download.pytorch.org/whl/cpu
-torch==2.7.1+cpu
-sbibm==1.1.0
+torch==2.5.1+cpu
 sbi==0.25.0
 numpy==1.26.4
 scipy==1.11.4
