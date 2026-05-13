@@ -183,13 +183,14 @@ def plot_vec30(
     else:
         raise ValueError('order must be "blocked" or "interleaved"')
 
-    ax.scatter(times, f1, label=labels[0], color='red', marker='o', lw=0.1, s=200)
-    ax.scatter(times, f2, label=labels[1], color='blue', marker='s', lw=0.1, s=200)
-    ax.scatter(times, f3, label=labels[2], color='green', marker='^', lw=0.1, s=200)
+    colormap = plt.get_cmap("Accent")
+    ax.scatter(times, f1, label=labels[0], color=colormap(0), marker='o', lw=0.05, s=600)
+    ax.scatter(times, f2, label=labels[1], color=colormap(1), marker='s', lw=0.05, s=600)
+    ax.scatter(times, f3, label=labels[2], color=colormap(2), marker='^', lw=0.05, s=600)
 
-    ax.plot(times, f1, label=labels[0], color='red', lw=0.5)
-    ax.plot(times, f2, label=labels[1], color='blue', ls='--', lw=0.5)
-    ax.plot(times, f3, label=labels[2], color='green', ls=':', lw=0.5)
+    ax.plot(times, f1, color=colormap(0), lw=0.3)
+    ax.plot(times, f2, color=colormap(1), ls='--', lw=0.3)
+    ax.plot(times, f3, color=colormap(2), ls=':', lw=0.3)
     ax.set_xlabel("Generation")
     ax.set_ylabel("Allele frequency")
     ax.set_title(title, loc="left")
