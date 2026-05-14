@@ -23,7 +23,7 @@ Important pinned dependencies:
 
 - `torch==2.5.1+cpu`
 - `sbi==0.25.0`
-- `scikit-learn==1.3.2`
+- `scikit-learn==1.5.0`
 - `seaborn==0.13.2`
 
 The CPU PyTorch wheel is intentional: it avoids CUDA/cuDNN runtime mismatches in notebook kernels. `sbi==0.25.0` is used because the NPSE workflow needs recent `sbi` functionality, including NPSE/iid support. Use the same environment for loading the saved `.pkl` posterior files and for running the notebooks.
@@ -38,29 +38,10 @@ From this directory:
 conda create -n collective python=3.10 -y
 conda activate collective
 python -m pip install --upgrade pip
-python -m pip install --no-deps -r requirements.txt
-python -m ipykernel install --user --name collective --display-name "Python (collective)"
-```
+python -m pip install  -r requirements.txt
+python -m pip install sbibm==1.1.0 --no-deps
+python -m ipykernel install --user --name collective --display-name "Python (collective)"```
 
-To bring an existing `collective` environment back in sync with `requirements.txt`:
-
-```bash
-conda activate collective
-python -m pip install --upgrade pip
-python -m pip install --force-reinstall --no-cache-dir -r requirements.txt
-```
-
-## Installation With venv
-
-From this directory:
-
-```bash
-python3.10 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-python -m ipykernel install --user --name collective_posterior_venv --display-name "Python (.venv collective_posterior)"
-```
 
 ## Installation Check
 
