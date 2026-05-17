@@ -31,6 +31,7 @@ class CollectivePosterior:
 
     def __init__(self, prior, Xs, amortized_posterior=None, log_C=None, epsilon=-10000,
                  n_eval=int(1e5), sample_var=0.05, posterior_list=[]):
+        """Store model components, sampling defaults, and posterior diagnostics."""
         self.prior = prior
         self.amortized_posterior = amortized_posterior
         self.Xs = Xs
@@ -83,6 +84,7 @@ class CollectivePosterior:
 
 
     def sample(self, n_samples, keep=True, step_size=0.05, take_sn=50, jump=1e5, m=1.5, num_workers=24, method='mcmc'):
+        """Dispatch to one of the available collective posterior samplers."""
         if method == 'mcmc':
             return self.mcmc_from_top_sn(n_total=n_samples, step_size=step_size, take_sn=take_sn)
         elif method == 'rejection':
@@ -166,6 +168,7 @@ class CollectivePosterior:
     
     # rejection sampling helper
     def _rejection_sample_batch(self, jump, m):
+        """Draw one prior batch and keep candidates passing the rejection threshold."""
         samps = self.prior.sample((jump,))
         prior_probs = self.prior.log_prob(samps)
         probs = torch.log(torch.rand(samps.size()[0]))
@@ -280,6 +283,7 @@ class CollectivePosterior:
         return total_lp / n_reps, lp_random
 
     def _collective_log_target(self, theta_pool, show_progress=False, progress_desc="Evaluating samples"):
+        """Evaluate the unnormalized collective log target for a pool of theta values."""
         n_reps = len(self.Xs)
         log_liks = []
         iterator = range(n_reps)
@@ -301,12 +305,14 @@ class CollectivePosterior:
 
     @staticmethod
     def _ess_and_weights(log_weights):
+        """Normalize log weights and return their effective sample size."""
         weights = torch.softmax(log_weights, dim=0)
         ess = 1.0 / torch.sum(weights ** 2)
         return float(ess), weights
 
     @classmethod
     def _choose_temperature(cls, log_weights, ess_min_frac=1e-3, max_temp=256.0, n_steps=25):
+        """Find a tempering value that raises ESS to the requested fraction."""
         target_ess = ess_min_frac * len(log_weights)
         ess_raw, _ = cls._ess_and_weights(log_weights)
         if ess_raw >= target_ess:
@@ -329,6 +335,7 @@ class CollectivePosterior:
 
     @staticmethod
     def _stratified_resample(weights, n_samples):
+        """Sample indices from normalized weights using stratified resampling."""
         positions = (torch.arange(n_samples, dtype=weights.dtype, device=weights.device) + torch.rand(1, device=weights.device)) / n_samples
         cumulative = torch.cumsum(weights, dim=0)
         indices = torch.searchsorted(cumulative, positions)
@@ -336,6 +343,7 @@ class CollectivePosterior:
 
     @staticmethod
     def _get_box_bounds(prior):
+        """Extract lower and upper box bounds from common torch prior wrappers."""
         if hasattr(prior, "base_dist") and hasattr(prior.base_dist, "low"):
             return prior.base_dist.low, prior.base_dist.high
         if hasattr(prior, "low") and hasattr(prior, "high"):
@@ -347,6 +355,7 @@ class CollectivePosterior:
 
     @staticmethod
     def _reflect_to_bounds(samples, low, high):
+        """Reflect samples that leave box bounds, then clamp any remaining overflow."""
         if low is None or high is None:
             return samples
         reflected = samples.clone()
