@@ -225,3 +225,7 @@ The notebook loads or saves:
 - `tests/predictive_checks_summary.pdf`
 
 `wf_collective_abc.ipynb` contains the Rej-ABC empirical WF analysis. `epsilon_fitting.ipynb` and `erratic.ipynb` provide WF-specific epsilon and posterior-density diagnostics.
+
+## License
+
+This repository is licensed under the MIT License. See `LICENSE`.
