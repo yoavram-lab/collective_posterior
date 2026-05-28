@@ -40,7 +40,8 @@ conda activate collective
 python -m pip install --upgrade pip
 python -m pip install  -r requirements.txt
 python -m pip install sbibm==1.1.0 --no-deps
-python -m ipykernel install --user --name collective --display-name "Python (collective)"```
+python -m ipykernel install --user --name collective --display-name "Python (collective)"
+```
 
 
 ## Installation Check
